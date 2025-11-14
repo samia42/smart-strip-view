@@ -8,6 +8,7 @@ import DashboardOverview from "./pages/DashboardOverview";
 import DeviceMonitoring from "./pages/DeviceMonitoring";
 import RiskAlerts from "./pages/RiskAlerts";
 import Settings from "./pages/Settings";
+import WebSocket from "./pages/WebSocket";
 import NotFound from "./pages/NotFound";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/devices" element={<DeviceMonitoring />} />
             <Route path="/alerts" element={<RiskAlerts />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/websocket" element={<WebSocket />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>

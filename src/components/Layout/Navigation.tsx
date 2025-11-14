@@ -1,6 +1,6 @@
 import { Container, Nav, Navbar } from "react-bootstrap";
 import { NavLink } from "react-router-dom";
-import { Activity, Zap, AlertTriangle, Settings } from "lucide-react";
+import { Activity, Zap, AlertTriangle, Settings, RadioTower } from "lucide-react";
 
 const Navigation = () => {
   return (
@@ -29,6 +29,10 @@ const Navigation = () => {
             <NavLink to="/settings" className="nav-link d-flex align-items-center gap-2">
               <Settings size={18} />
               Settings
+            </NavLink>
+            <NavLink to="/websocket" className="nav-link d-flex align-items-center gap-2">
+              <RadioTower size={18} />
+              WebSocket
             </NavLink>
           </Nav>
         </Navbar.Collapse>
