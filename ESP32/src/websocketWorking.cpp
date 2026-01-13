@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <WebSocketsServer.h>
+#include <ESPmDNS.h>
 
 const char *ssid = "BoxnetA";
 const char *password = "BoxnetArduino";
@@ -66,16 +67,21 @@ void setup()
   pinMode(SENSOR_PIN_1, INPUT);
 
   WiFi.begin(ssid, password);
-  Serial.print("Connexion...");
+  Serial.print("Connecting...");
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
     Serial.print(".");
   }
 
-  Serial.println("\nConnecté !");
-  Serial.print("Adresse IP: ");
+  Serial.println("\nConnected!");
+  Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
+
+  if (!MDNS.begin("SmartPowerStrip")) {
+    Serial.println("MDNS failed to start");
+    return;
+  }
 
   delay(1000);
   float sum = 0.0;

@@ -14,7 +14,7 @@ const WebSocketPage = () => {
   const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
-    const ws = new WebSocket("ws://192.168.8.184:81");
+    const ws = new WebSocket("ws://SmartPowerStrip.local:81");
     setSocket(ws);
 
     ws.onopen = () => {
