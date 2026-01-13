@@ -1,25 +1,34 @@
 #include <WiFi.h>
 #include <WebSocketsServer.h>
 
-const char* ssid = "BoxnetA";
-const char* password = "BoxnetArduino";
+const char *ssid = "BoxnetA";
+const char *password = "BoxnetArduino";
 
 WebSocketsServer webSocket = WebSocketsServer(81);
+
+const int SENSOR_PIN_1 = 34;
+
+const float SENSITIVITY = 0.100;
+const float VREF = 3.3;
+const int ADC_RES = 4095;
+const float RESISTOR_MULTIPLIER = 1.545454;
+
+float measuredOffset = 2.5;
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
 {
   if (type == WStype_TEXT)
   {
     String msg = String((char *)payload);
-    if (msg == "LED_ON")
+    if (msg == "RELAY_ON")
     {
-      digitalWrite(2, HIGH);
-      Serial.println("LED ON command received");
+      digitalWrite(14, HIGH);
+      Serial.println("RELAY ON");
     }
-    else if (msg == "LED_OFF")
+    else if (msg == "RELAY_OFF")
     {
-      digitalWrite(2, LOW);
-      Serial.println("LED OFF command received");
+      digitalWrite(14, LOW);
+      Serial.println("RELAY OFF");
     }
   }
 }
@@ -28,8 +37,10 @@ void setup()
 {
   Serial.begin(115200);
 
-  pinMode(2, OUTPUT);
-  digitalWrite(2, HIGH);
+  pinMode(14, OUTPUT);
+  digitalWrite(14, LOW);
+
+  pinMode(SENSOR_PIN_1, INPUT);
 
   WiFi.begin(ssid, password);
   Serial.print("Connexion...");
@@ -45,6 +56,18 @@ void setup()
 
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
+
+  float sum = 0.0;
+  for (int i = 0; i < 20; i++)
+  {
+    int raw = analogRead(SENSOR_PIN_1);
+    float vPin = (raw * VREF) / ADC_RES;
+    sum += vPin * RESISTOR_MULTIPLIER;
+    delay(50);
+  }
+  measuredOffset = sum / 20.0;
+  Serial.print("measured offset: ");
+  Serial.print(measuredOffset, 3);
 }
 
 void loop()
@@ -56,11 +79,33 @@ void loop()
   if (now - lastSend >= 1000)
   {
     lastSend = now;
-    // Generated Data
-    float current1 = random(100, 200) / 10.0; // 10.0 → 20.0 A
-    float current2 = random(50, 100) * 100.0; // 5.0 → 10.0 A
+
+    int adcValue = analogRead(SENSOR_PIN_1);
+    float voltagePin = (adcValue * VREF) / ADC_RES;
+    float voltageOriginal = voltagePin * RESISTOR_MULTIPLIER;
+    float current1 = (voltageOriginal - measuredOffset) / SENSITIVITY;
+
+    int relayState = digitalRead(14);
+
+    Serial.print("ADC: ");
+    Serial.print(adcValue);
+
+    Serial.print(" | V_Pin: ");
+    Serial.print(voltagePin, 3);
+    Serial.print("V");
+
+    Serial.print(" | V_Sensor: ");
+    Serial.print(voltageOriginal, 3);
+    Serial.print("V");
+
+    Serial.print(" | Current: ");
+    Serial.print(current1, 2);
+    Serial.println(" A");
+
     // JSON
-    String json = "{\"c1\": " + String(current1, 1) + ", \"c2\": " + String(current2, 1) + "}";
+    String json = "{\"c1\": " + String(current1, 1) +
+                  ", \"c2\": " + String("0", 1) +
+                  ", \"relay\": " + String(relayState) + "}";
     webSocket.broadcastTXT(json);
   }
 }

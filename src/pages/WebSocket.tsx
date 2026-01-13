@@ -4,12 +4,13 @@ import { Container, Card } from "react-bootstrap";
 type EspData = {
   c1: number;
   c2: number;
+  relay?: number; // 0 = OFF, 1 = ON
 };
 
 const WebSocketPage = () => {
-  const [data, setData] = useState<EspData>({ c1: 0, c2: 0 });
+  const [data, setData] = useState<EspData>({ c1: 0, c2: 0, relay: 0 });
+  const [relayState, setRelayState] = useState<number>(0);
   const [socket, setSocket] = useState<WebSocket | null>(null);
-  const [ledOn, setLedOn] = useState(true);
   const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
@@ -28,6 +29,9 @@ const WebSocketPage = () => {
       try {
         const json = JSON.parse(event.data) as EspData;
         setData(json);
+        if (typeof json.relay === "number") {
+          setRelayState(json.relay);
+        }
       } catch (e) {
         // Ignore non-JSON messages
       }
@@ -43,11 +47,18 @@ const WebSocketPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof data.relay === "number") {
+      setRelayState(data.relay);
+    }
+  }, [data.relay]);
+
   const handleLedToggle = () => {
     if (socket && socket.readyState === WebSocket.OPEN) {
-      const command = ledOn ? "LED_OFF" : "LED_ON";
+      const newRelayState = relayState ? 0 : 1;
+      setRelayState(newRelayState);
+      const command = newRelayState ? "RELAY_ON" : "RELAY_OFF";
       socket.send(command);
-      setLedOn((prev) => !prev);
     }
   };
 
@@ -88,7 +99,7 @@ const WebSocketPage = () => {
             onClick={handleLedToggle}
             disabled={!socket || socket.readyState !== WebSocket.OPEN}
           >
-            {ledOn ? "Turn LED Off" : "Turn LED On"}
+            {relayState ? "Turn Relay Off" : "Turn Relay On"}
           </button>
         </Card.Body>
       </Card>
