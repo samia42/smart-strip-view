@@ -9,7 +9,7 @@ type EspData = {
 
 const WebSocketPage = () => {
   const [data, setData] = useState<EspData>({ c1: 0, c2: 0, relay: 0 });
-  const [relayState, setRelayState] = useState<number>(0);
+  const [relayState, setRelayState] = useState<number | null>(null); // null means not initialized yet
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
 
@@ -29,7 +29,8 @@ const WebSocketPage = () => {
       try {
         const json = JSON.parse(event.data) as EspData;
         setData(json);
-        if (typeof json.relay === "number") {
+        // Only set relayState if it hasn't been set yet (i.e., on first load)
+        if (typeof json.relay === "number" && relayState === null) {
           setRelayState(json.relay);
         }
       } catch (e) {
@@ -47,14 +48,8 @@ const WebSocketPage = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof data.relay === "number") {
-      setRelayState(data.relay);
-    }
-  }, [data.relay]);
-
   const handleLedToggle = () => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
+    if (socket && socket.readyState === WebSocket.OPEN && relayState !== null) {
       const newRelayState = relayState ? 0 : 1;
       setRelayState(newRelayState);
       const command = newRelayState ? "RELAY_ON" : "RELAY_OFF";
@@ -97,9 +92,13 @@ const WebSocketPage = () => {
           <button
             className="btn btn-primary mt-3"
             onClick={handleLedToggle}
-            disabled={!socket || socket.readyState !== WebSocket.OPEN}
+            disabled={!socket || socket.readyState !== WebSocket.OPEN || relayState === null}
           >
-            {relayState ? "Turn Relay Off" : "Turn Relay On"}
+            {relayState === null
+              ? "Loading..."
+              : relayState
+              ? "Turn Relay Off"
+              : "Turn Relay On"}
           </button>
         </Card.Body>
       </Card>
