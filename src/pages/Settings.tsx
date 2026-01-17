@@ -1,12 +1,22 @@
 import { Container, Row, Col, Card, Form, Button } from "react-bootstrap";
 import { Save, DollarSign, Zap, Bell, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { useState, useEffect } from "react";
 
 const Settings = () => {
+  const [currency, setCurrency] = useState(() => {
+    return localStorage.getItem("app_currency") || "€";
+  });
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     toast.success("Settings saved successfully");
+
+    localStorage.setItem("app_currency", currency);
+
+    toast.success(`Settings saved: Currency set to ${currency}`);
   };
+
 
   return (
     <Container fluid>
@@ -25,7 +35,7 @@ const Settings = () => {
               </Card.Title>
               <Form onSubmit={handleSave}>
                 <Form.Group className="mb-3">
-                  <Form.Label>Cost per kWh (USD)</Form.Label>
+                  <Form.Label>Cost per kWh (EUR)</Form.Label>
                   <Form.Control
                     type="number"
                     step="0.01"
@@ -38,10 +48,14 @@ const Settings = () => {
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>Currency</Form.Label>
-                  <Form.Select className="bg-secondary border-secondary text-white">
-                    <option>USD ($)</option>
-                    <option>EUR (€)</option>
-                    <option>GBP (£)</option>
+                  <Form.Select 
+                    className="bg-secondary border-secondary text-white" 
+                    value={currency} 
+                    onChange={(e) => setCurrency(e.target.value)}
+                  >
+                    <option value="€">EUR (€)</option>
+                    <option value="$">USD ($)</option>
+                    <option value="£">GBP (£)</option>
                   </Form.Select>
                 </Form.Group>
                 <Button variant="primary" type="submit">

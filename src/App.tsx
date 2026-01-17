@@ -6,9 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Navigation from "./components/Layout/Navigation";
 import DashboardOverview from "./pages/DashboardOverview";
 import DeviceMonitoring from "./pages/DeviceMonitoring";
-import RiskAlerts from "./pages/RiskAlerts";
 import Settings from "./pages/Settings";
-import NotFound from "./pages/NotFound";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const queryClient = new QueryClient();
@@ -24,9 +22,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<DashboardOverview />} />
             <Route path="/devices" element={<DeviceMonitoring />} />
-            <Route path="/alerts" element={<RiskAlerts />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<NotFound />} />
           </Routes>
         </div>
       </BrowserRouter>
