@@ -1,14 +1,13 @@
 #include <WiFi.h>
 #include <WebSocketsServer.h>
 #include <ESPmDNS.h>
-
-const char *ssid = "BoxnetA";
-const char *password = "BoxnetArduino";
+#include <WiFiManager.h>
 
 WebSocketsServer webSocket = WebSocketsServer(81);
+WiFiManager wifiManager;
 
-const int SENSOR_PIN_1 = 34;
-const int RELAY_PIN_1 = 14;
+const int SENSOR_PIN_1 = 4;
+const int RELAY_PIN_1 = 5;
 
 const float SENSITIVITY = 0.100;
 const float VREF = 3.3;
@@ -17,25 +16,27 @@ const float RESISTOR_MULTIPLIER = 1.545454;
 
 float measuredOffset = 2.5;
 
-float getACCurrent() {
+float getACCurrent(int sensorPin)
+{
   float sumSquares = 0;
   long sampleCount = 0;
   unsigned long startTime = millis();
 
-  while (millis() - startTime < 20) {
-    int adcValue = analogRead(SENSOR_PIN_1);
+  while (millis() - startTime < 20)
+  {
+    int adcValue = analogRead(sensorPin);
     float voltagePin = (adcValue * VREF) / ADC_RES;
     float voltageOriginal = voltagePin * RESISTOR_MULTIPLIER;
-    
+
     float currentInst = (voltageOriginal - measuredOffset) / SENSITIVITY;
-    
+
     sumSquares += (currentInst * currentInst);
     sampleCount++;
   }
 
   float rms = sqrt(sumSquares / sampleCount);
-  
-  //if (rms < 0.10) rms = 0.0; 
+
+  // if (rms < 0.10) rms = 0.0;
   return rms;
 }
 
@@ -46,12 +47,12 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
     String msg = String((char *)payload);
     if (msg == "RELAY_ON")
     {
-      digitalWrite(14, HIGH);
+      digitalWrite(RELAY_PIN_1, HIGH);
       Serial.println("RELAY ON");
     }
     else if (msg == "RELAY_OFF")
     {
-      digitalWrite(14, LOW);
+      digitalWrite(RELAY_PIN_1, LOW);
       Serial.println("RELAY OFF");
     }
   }
@@ -66,24 +67,30 @@ void setup()
 
   pinMode(SENSOR_PIN_1, INPUT);
 
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting...");
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
+  //wifiManager.resetSettings();
+
+  std::vector<const char *> menu = {"wifi", "restart"};
+  wifiManager.setMenu(menu);
+
+  bool res = wifiManager.autoConnect("SmartPowerStrip_Config");
+
+  if(!res) {
+    Serial.println("Failed to connect");
+  } else {
+    Serial.println("Connected to WiFi!");
+    Serial.println(WiFi.localIP());
   }
 
   Serial.println("\nConnected!");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
 
-  if (!MDNS.begin("SmartPowerStrip")) {
+  if (!MDNS.begin("SmartPowerStrip"))
+  {
     Serial.println("MDNS failed to start");
     return;
   }
 
   delay(1000);
+
   float sum = 0.0;
   for (int i = 0; i < 100; i++)
   {
@@ -112,10 +119,10 @@ void loop()
 
     int adcValue = analogRead(SENSOR_PIN_1);
     float voltagePin = (adcValue * VREF) / ADC_RES;
-    float voltageOriginal = voltagePin * RESISTOR_MULTIPLIER;
-    float current1 = (voltageOriginal - measuredOffset) / SENSITIVITY;
+    float current1 = getACCurrent(SENSOR_PIN_1);
+    float power1 = current1 * 230;
 
-    int relayState = digitalRead(14);
+    int relayState = digitalRead(RELAY_PIN_1);
 
     Serial.print("ADC: ");
     Serial.print(adcValue);
@@ -124,13 +131,13 @@ void loop()
     Serial.print(voltagePin, 3);
     Serial.print("V");
 
-    Serial.print(" | V_Sensor: ");
-    Serial.print(voltageOriginal, 3);
-    Serial.print("V");
-
     Serial.print(" | Current: ");
     Serial.print(current1, 2);
-    Serial.println(" A");
+    Serial.print(" A");
+
+    Serial.print(" | Power: ");
+    Serial.print(power1, 2);
+    Serial.println(" W");
 
     // JSON
     String json = "{\"c1\": " + String(current1, 1) +
