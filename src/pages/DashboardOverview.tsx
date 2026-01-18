@@ -1,147 +1,115 @@
-import { useState, useEffect } from "react";
-import { Zap, DollarSign, TrendingUp } from "lucide-react";
+import { Alert, Badge, Card, Col, Container, ListGroup, Row } from "react-bootstrap";
+import { DollarSign, Zap } from "lucide-react";
 import MetricCard from "@/components/Dashboard/MetricCard";
-import SimpleChart from "@/components/Dashboard/SimpleChart";
-import { socketsData, SocketData } from "@/data/mockData";
-import { cn } from "@/lib/utils";
-
-const DashboardCard = ({ className, children }: { className?: string, children: React.ReactNode }) => (
-  <div className={cn("rounded-lg border bg-slate-950 border-slate-800 text-slate-100 shadow-xl", className)}>
-    {children}
-  </div>
-);
-
-const generateHistoryData = () => {
-  const data = [];
-  const minutes = 60;
-  let baseValue = 200;
-
-  for (let i = 0; i <= minutes; i++) {
-    const noise = Math.floor(Math.random() * 40) - 20;
-    baseValue = Math.max(50, Math.min(400, baseValue + noise));
-
-    let label = "";
-    const minutesFromEnd = minutes - i;
-
-    if (minutesFromEnd === 0) {
-      label = "now";
-    } else if (minutesFromEnd === 60) {
-      label = "-1h";
-    } else if (minutesFromEnd % 10 === 0) {
-      label = `-${minutesFromEnd}min`;
-    }
-
-    data.push({
-      label: label,
-      value: baseValue,
-    });
-  }
-  return data;
-};
-
-const historyData = generateHistoryData();
+import ConsumptionChart from "@/components/Dashboard/ConsumptionChart";
+import { usePowerStrip } from "@/context/PowerStripContext";
 
 const DashboardOverview = () => {
-  const [currency, setCurrency] = useState("€");
-  
-  const [currentSockets, setCurrentSockets] = useState<SocketData[]>(() => {
-    const saved = localStorage.getItem("app_sockets_data");
-    return saved ? JSON.parse(saved) : socketsData;
+  const {
+    getTotalConsumption,
+    getTotalCost,
+    getConsumptionSeries,
+    getTopConsumers,
+    getCurrencySymbol,
+    currentAlert,
+    costConfig,
+  } = usePowerStrip();
+  const totalPower = getTotalConsumption();
+  const totalCost = getTotalCost();
+  const currencySymbol = getCurrencySymbol();
+  const topConsumers = getTopConsumers(3);
+
+  const chartSeries = getConsumptionSeries("all", "last_day");
+  const chartData = chartSeries.map((point) => {
+    const date = new Date(point.timestamp);
+    return {
+      label: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      value: point.value,
+    };
   });
 
-  useEffect(() => {
-    const savedCurrency = localStorage.getItem("app_currency");
-    if (savedCurrency) {
-      setCurrency(savedCurrency);
-    }
-  }, []);
-
-  const totalPower = currentSockets.reduce((acc, socket) => {
-    return acc + (socket.status === "on" ? socket.currentPower : 0);
-  }, 0);
-
-  const totalCost = currentSockets.reduce((acc, socket) => acc + socket.monthlyCost, 0);
-
   return (
-    <div className="p-6 bg-slate-900 min-h-screen font-sans text-slate-100">
-      
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Dashboard Overview</h1>
-        <p className="text-slate-400">Real-time energy monitoring and insights for your smart power strip</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        <MetricCard
-          title="Total Power Consumption"
-          value={`${totalPower}W`}
-          subtitle="Current usage across all sockets"
-          icon={Zap}
-          variant="primary"
-          trend={{ value: "12% vs yesterday", isPositive: false }}
-        />
-        <MetricCard
-          title="Estimated Monthly Cost"
-          value={`${totalCost.toFixed(2)} ${currency}`}
-          subtitle="Based on current usage"
-          icon={DollarSign}
-          variant="success"
-        />
-        <MetricCard
-          title="Efficiency Score"
-          value="78%"
-          subtitle="Good energy management"
-          icon={TrendingUp}
-          variant="success"
-          trend={{ value: "5% improvement", isPositive: true }}
-        />
-      </div>
-
-      <div className="mb-8">
-        <SimpleChart 
-            title="Total Power Consumption (Last Hour)" 
-            data={historyData} 
-            unit="W" 
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <DashboardCard className="p-6">
-            <h3 className="text-xl font-semibold mb-6 text-slate-100">Most costly devices</h3>
-            
-            <div className="space-y-6">
-              {currentSockets.map((socket) => {
-                const percentage = totalCost > 0 ? (socket.monthlyCost / totalCost) * 100 : 0;
-                
-                return (
-                  <div key={socket.id}>
-                    <div className="flex justify-between mb-2 text-sm">
-                      <span className="font-medium text-slate-200">{socket.name}</span>
-                      <span className="text-slate-400 font-mono">
-                        {currency}{socket.monthlyCost.toFixed(2)}<span className="text-slate-600 text-xs">/mo</span>
-                      </span>
-                    </div>
-                    
-                    <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+    <Container fluid>
+      {currentAlert && (
+        <Alert
+          variant={currentAlert.type === "critical" ? "danger" : "warning"}
+          className="mb-4"
+        >
+          <div className="d-flex justify-content-between align-items-start gap-3">
+            <div>
+              <div className="fw-bold">{currentAlert.title}</div>
+              <div className="small">{currentAlert.message}</div>
             </div>
+            <Badge bg={currentAlert.type === "critical" ? "danger" : "warning"}>
+              {currentAlert.type.toUpperCase()}
+            </Badge>
+          </div>
+        </Alert>
+      )}
 
-            <div className="border-t border-slate-800 pt-5 mt-6">
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-slate-300">Total Monthly Cost</span>
-                <span className="text-xl font-bold text-blue-500">{currency}{totalCost.toFixed(2)}</span>
-              </div>
-            </div>
-        </DashboardCard>
+      <div className="mb-4">
+        <h1 className="text-white fw-bold mb-2">Overview</h1>
+        <p className="text-muted">Real-time energy monitoring for your smart power strip</p>
       </div>
 
-    </div>
+      <Row className="g-4 mb-4">
+        <Col md={6} lg={4}>
+          <MetricCard
+            title="Total SmartPowerStrip Consumption"
+            value={`${totalPower}W`}
+            subtitle="Current usage across all outlets"
+            icon={Zap}
+            variant="primary"
+          />
+        </Col>
+        <Col md={6} lg={4}>
+          <MetricCard
+            title="Total Price"
+            value={`${currencySymbol}${totalCost.toFixed(2)}`}
+            subtitle="Estimated cost for the last 30 days"
+            icon={DollarSign}
+            variant="success"
+          />
+        </Col>
+      </Row>
+
+      <Row className="g-4">
+        <Col lg={8}>
+          <ConsumptionChart title="Total Consumption (Last 24 Hours)" data={chartData} unit="W" />
+        </Col>
+        <Col lg={4}>
+          <Card bg="dark" text="white" className="border-secondary h-100">
+            <Card.Body>
+              <Card.Title className="mb-3">Top Consuming Devices</Card.Title>
+              <ListGroup variant="flush">
+                {topConsumers.map((socket) => {
+                  const estimatedCost = socket.monthlyConsumption * costConfig.rate;
+                  return (
+                    <ListGroup.Item
+                      key={socket.id}
+                      className="bg-transparent border-secondary text-white px-0"
+                    >
+                      <div className="d-flex justify-content-between align-items-start">
+                        <div>
+                          <div className="fw-bold">{socket.name}</div>
+                          <small className="text-muted">
+                            {socket.monthlyConsumption.toFixed(1)} kWh / month
+                          </small>
+                        </div>
+                        <div className="text-primary fw-bold">
+                          {currencySymbol}
+                          {estimatedCost.toFixed(2)}
+                        </div>
+                      </div>
+                    </ListGroup.Item>
+                  );
+                })}
+              </ListGroup>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+    </Container>
   );
 };
 

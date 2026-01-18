@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Activity, Zap, Settings, Menu, X } from "lucide-react";
+import { Activity, Zap, Settings, Menu, X, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const Navigation = () => {
@@ -10,6 +10,7 @@ const Navigation = () => {
   const links = [
     { to: "/", label: "Overview", icon: Activity },
     { to: "/devices", label: "Device Monitoring", icon: Zap },
+    { to: "/consumption", label: "Consumption", icon: BarChart2 },
     { to: "/settings", label: "Settings", icon: Settings },
   ];
 
