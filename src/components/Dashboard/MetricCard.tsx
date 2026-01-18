@@ -1,5 +1,5 @@
-import { Card } from "react-bootstrap";
 import { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils"; 
 
 interface MetricCardProps {
   title: string;
@@ -14,33 +14,47 @@ interface MetricCardProps {
 }
 
 const MetricCard = ({ title, value, subtitle, icon: Icon, variant = "primary", trend }: MetricCardProps) => {
-  const variantColors = {
-    primary: "text-primary",
-    success: "text-success",
-    warning: "text-warning",
-    danger: "text-danger",
+  
+  const variantStyles = {
+    primary: "text-blue-500 bg-blue-500/10", 
+    success: "text-green-500 bg-green-500/10", 
+    warning: "text-yellow-500 bg-yellow-500/10", 
+    danger: "text-red-500 bg-red-500/10", 
   };
 
   return (
-    <Card bg="dark" text="white" className="h-100 border-secondary">
-      <Card.Body>
-        <div className="d-flex justify-content-between align-items-start mb-3">
-          <div>
-            <Card.Subtitle className="text-muted mb-2">{title}</Card.Subtitle>
-            <Card.Title className="display-6 fw-bold mb-0">{value}</Card.Title>
-            {subtitle && <small className="text-muted">{subtitle}</small>}
-          </div>
-          <div className={`${variantColors[variant]} opacity-75`}>
-            <Icon size={40} />
-          </div>
+    <div className="h-full rounded-lg border bg-slate-950 border-slate-800 text-slate-100 shadow-xl p-6 transition-all hover:border-slate-700">
+      
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="text-sm font-medium text-slate-400">{title}</p>
+          <h3 className="text-3xl font-bold text-slate-100 mt-2">{value}</h3>
         </div>
-        {trend && (
-          <div className={`small ${trend.isPositive ? "text-success" : "text-danger"}`}>
-            {trend.isPositive ? "↑" : "↓"} {trend.value}
-          </div>
-        )}
-      </Card.Body>
-    </Card>
+        
+        <div className={cn("p-3 rounded-xl", variantStyles[variant])}>
+          <Icon size={24} />
+        </div>
+      </div>
+
+      {(trend || subtitle) && (
+        <div className="mt-4 flex items-center text-sm">
+          {trend && (
+            <span className={cn(
+              "font-medium flex items-center mr-2", 
+              trend.isPositive ? "text-green-500" : "text-red-500"
+            )}>
+              {trend.isPositive ? "↑" : "↓"} {trend.value}
+            </span>
+          )}
+          
+          {subtitle && (
+            <span className="text-slate-500 truncate">
+              {subtitle}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 

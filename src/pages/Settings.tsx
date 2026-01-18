@@ -1,206 +1,120 @@
-import { Container, Row, Col, Card, Form, Button } from "react-bootstrap";
-import { Save, DollarSign, Zap, Bell, Shield } from "lucide-react";
-import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import { Save, Coins, Zap } from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const Settings = () => {
-  const [currency, setCurrency] = useState(() => {
-    return localStorage.getItem("app_currency") || "€";
-  });
+  const [currency, setCurrency] = useState("€");
+  const [energyCost, setEnergyCost] = useState("0.15");
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast.success("Settings saved successfully");
+  useEffect(() => {
+    const savedCurrency = localStorage.getItem("app_currency");
+    const savedCost = localStorage.getItem("app_energy_cost");
 
+    if (savedCurrency) setCurrency(savedCurrency);
+    if (savedCost) setEnergyCost(savedCost);
+
+    setIsLoaded(true);
+  }, []);
+
+  const handleSave = () => {
     localStorage.setItem("app_currency", currency);
+    localStorage.setItem("app_energy_cost", energyCost);
 
-    toast.success(`Settings saved: Currency set to ${currency}`);
+    window.dispatchEvent(new Event("storage"));
+
+    toast.success("Settings saved successfully");
   };
 
+  if (!isLoaded) return null;
 
   return (
-    <Container fluid>
-      <div className="mb-4">
-        <h1 className="text-white fw-bold mb-2">Settings</h1>
-        <p className="text-muted">Configure your smart power strip preferences</p>
+    <div className="p-6 bg-slate-900 min-h-screen font-sans text-slate-100">
+
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Settings</h1>
+        <p className="text-slate-400">Configure your application preferences</p>
       </div>
 
-      <Row className="g-4">
-        <Col lg={6}>
-          <Card bg="dark" text="white" className="border-secondary mb-4">
-            <Card.Body>
-              <Card.Title className="mb-4 d-flex align-items-center gap-2">
-                <DollarSign className="text-primary" size={24} />
-                Energy Cost Configuration
-              </Card.Title>
-              <Form onSubmit={handleSave}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Cost per kWh (EUR)</Form.Label>
-                  <Form.Control
-                    type="number"
-                    step="0.01"
-                    defaultValue="0.15"
-                    className="bg-secondary border-secondary text-white"
-                  />
-                  <Form.Text className="text-muted">
-                    Average US electricity rate is $0.15 per kWh
-                  </Form.Text>
-                </Form.Group>
-                <Form.Group className="mb-3">
-                  <Form.Label>Currency</Form.Label>
-                  <Form.Select 
-                    className="bg-secondary border-secondary text-white" 
-                    value={currency} 
-                    onChange={(e) => setCurrency(e.target.value)}
+      <div className="max-w-2xl">
+        <div className="rounded-lg border bg-slate-950 border-slate-800 text-slate-100 shadow-xl overflow-hidden">
+
+          <div className="p-6 border-b border-slate-800">
+            <h3 className="text-xl font-medium flex items-center gap-2">
+              <Coins size={20} className="text-blue-500" />
+              General Configuration
+            </h3>
+            <p className="text-sm text-slate-400 mt-1">
+              Manage currency symbols and electricity costs used for calculations.
+            </p>
+          </div>
+
+          <div className="p-6 space-y-8">
+
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-slate-300">Currency Symbol</label>
+              <div className="grid grid-cols-3 gap-4">
+                {["€", "$", "£"].map((symbol) => (
+                  <button
+                    key={symbol}
+                    onClick={() => setCurrency(symbol)}
+                    className={cn(
+                      "flex items-center justify-center py-3 px-4 rounded-md border transition-all",
+                      currency === symbol
+                        ? "bg-blue-500/10 border-blue-500 text-blue-500 font-bold"
+                        : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700 hover:bg-slate-800"
+                    )}
                   >
-                    <option value="€">EUR (€)</option>
-                    <option value="$">USD ($)</option>
-                    <option value="£">GBP (£)</option>
-                  </Form.Select>
-                </Form.Group>
-                <Button variant="primary" type="submit">
-                  <Save size={16} className="me-2" />
-                  Save Settings
-                </Button>
-              </Form>
-            </Card.Body>
-          </Card>
+                    {symbol}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-          <Card bg="dark" text="white" className="border-secondary">
-            <Card.Body>
-              <Card.Title className="mb-4 d-flex align-items-center gap-2">
-                <Bell className="text-warning" size={24} />
-                Notification Preferences
-              </Card.Title>
-              <Form>
-                <Form.Check
-                  type="switch"
-                  id="critical-alerts"
-                  label="Critical Temperature Alerts"
-                  defaultChecked
-                  className="mb-3 text-white"
-                />
-                <Form.Check
-                  type="switch"
-                  id="cost-alerts"
-                  label="High Cost Notifications"
-                  defaultChecked
-                  className="mb-3 text-white"
-                />
-                <Form.Check
-                  type="switch"
-                  id="efficiency-tips"
-                  label="Energy Efficiency Tips"
-                  defaultChecked
-                  className="mb-3 text-white"
-                />
-                <Form.Check
-                  type="switch"
-                  id="daily-summary"
-                  label="Daily Usage Summary"
-                  className="mb-3 text-white"
-                />
-                <Button variant="primary" onClick={handleSave}>
-                  <Save size={16} className="me-2" />
-                  Save Preferences
-                </Button>
-              </Form>
-            </Card.Body>
-          </Card>
-        </Col>
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-slate-300 flex items-center justify-between">
+                <span>Energy Cost (per kWh)</span>
+                <span className="text-xs text-slate-500 font-normal">Used to estimate monthly costs</span>
+              </label>
 
-        <Col lg={6}>
-          <Card bg="dark" text="white" className="border-secondary mb-4">
-            <Card.Body>
-              <Card.Title className="mb-4 d-flex align-items-center gap-2">
-                <Zap className="text-primary" size={24} />
-                Device Configuration
-              </Card.Title>
-              <Form onSubmit={handleSave}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Socket 1 Device Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    defaultValue="Living Room TV"
-                    className="bg-secondary border-secondary text-white"
-                  />
-                </Form.Group>
-                <Form.Group className="mb-3">
-                  <Form.Label>Socket 2 Device Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    defaultValue="Gaming Console"
-                    className="bg-secondary border-secondary text-white"
-                  />
-                </Form.Group>
-                <Form.Group className="mb-3">
-                  <Form.Label>Socket 3 Device Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    defaultValue="Sound System"
-                    className="bg-secondary border-secondary text-white"
-                  />
-                </Form.Group>
-                <Form.Group className="mb-3">
-                  <Form.Label>Socket 4 Device Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    defaultValue="Phone Charger"
-                    className="bg-secondary border-secondary text-white"
-                  />
-                </Form.Group>
-                <Button variant="primary" type="submit">
-                  <Save size={16} className="me-2" />
-                  Update Device Names
-                </Button>
-              </Form>
-            </Card.Body>
-          </Card>
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+                  <Zap size={16} />
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={energyCost}
+                  onChange={(e) => setEnergyCost(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 text-slate-100 rounded-md py-2.5 pl-10 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-600"
+                  placeholder="0.15"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
+                  {currency}/kWh
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">
+                Current average price: <span className="text-slate-300">0.15 - 0.25 {currency}</span> depending on your region.
+              </p>
+            </div>
 
-          <Card bg="dark" text="white" className="border-secondary">
-            <Card.Body>
-              <Card.Title className="mb-4 d-flex align-items-center gap-2">
-                <Shield className="text-success" size={24} />
-                Safety Thresholds
-              </Card.Title>
-              <Form onSubmit={handleSave}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Critical Temperature (°C)</Form.Label>
-                  <Form.Control
-                    type="number"
-                    defaultValue="55"
-                    className="bg-secondary border-secondary text-white"
-                  />
-                  <Form.Text className="text-muted">
-                    Alert triggered when temperature exceeds this value
-                  </Form.Text>
-                </Form.Group>
-                <Form.Group className="mb-3">
-                  <Form.Label>Warning Temperature (°C)</Form.Label>
-                  <Form.Control
-                    type="number"
-                    defaultValue="45"
-                    className="bg-secondary border-secondary text-white"
-                  />
-                </Form.Group>
-                <Form.Group className="mb-3">
-                  <Form.Label>Maximum Power per Socket (W)</Form.Label>
-                  <Form.Control
-                    type="number"
-                    defaultValue="1800"
-                    className="bg-secondary border-secondary text-white"
-                  />
-                </Form.Group>
-                <Button variant="primary" type="submit">
-                  <Save size={16} className="me-2" />
-                  Update Thresholds
-                </Button>
-              </Form>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-    </Container>
+          </div>
+
+          <div className="p-6 bg-slate-900/50 border-t border-slate-800 flex justify-end">
+            <button
+              onClick={handleSave}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-md font-medium transition-colors shadow-lg shadow-blue-900/20"
+            >
+              <Save size={18} />
+              Save Changes
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
   );
 };
 
