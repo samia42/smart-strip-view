@@ -6,8 +6,8 @@
 WebSocketsServer webSocket = WebSocketsServer(81);
 WiFiManager wifiManager;
 
-const int SENSOR_PIN_1 = 4;
-const int RELAY_PIN_1 = 5;
+const int SENSOR_PIN_1 = 4; // 14
+const int RELAY_PIN_1 = 5;  // 34
 
 const float SENSITIVITY = 0.100;
 const float VREF = 3.3;
@@ -67,16 +67,24 @@ void setup()
 
   pinMode(SENSOR_PIN_1, INPUT);
 
-  //wifiManager.resetSettings();
+  wifiManager.resetSettings();
 
-  std::vector<const char *> menu = {"wifi", "restart"};
-  wifiManager.setMenu(menu);
+  const char* customHead = R"raw()raw";
+
+  wifiManager.setCustomHeadElement(customHead);
+  wifiManager.setTitle("Smart Power Strip Wifi Setup");
+
+  const char* menu[] = {"wifi"};
+  wifiManager.setMenu(menu, 1);
 
   bool res = wifiManager.autoConnect("SmartPowerStrip_Config");
 
-  if(!res) {
+  if (!res)
+  {
     Serial.println("Failed to connect");
-  } else {
+  }
+  else
+  {
     Serial.println("Connected to WiFi!");
     Serial.println(WiFi.localIP());
   }

@@ -9,7 +9,7 @@ type EspData = {
 
 const WebSocketPage = () => {
   const [data, setData] = useState<EspData>({ c1: 0, c2: 0, relay: 0 });
-  const [relayState, setRelayState] = useState<number | null>(null); // null means not initialized yet
+  const [relayState, setRelayState] = useState<number | null>(null);
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
 
