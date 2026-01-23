@@ -11,8 +11,8 @@ WiFiManager wifiManager;
 
 const int savePeriod = 15; // in minutes
 
-const int SENSOR_PIN_1 = 34; // 34
-const int RELAY_PIN_1 = 14;  // 14
+const int SENSOR_PIN_1 = 34;
+const int RELAY_PIN_1 = 14;
 
 // Current sensor parameters
 const float SENSITIVITY = 0.100;
@@ -58,6 +58,9 @@ int lastMonth = -1;
 
 // Last time data was written to flash
 time_t lastWriteTime = 0;
+
+unsigned long lastWifiCheck = 0;
+const unsigned long WIFI_TIMEOUT = 30000;
 
 // Save last write time to flash
 void saveLastWriteTime(time_t timestamp)
@@ -287,6 +290,9 @@ void setup()
 {
   Serial.begin(115200);
 
+  delay(5000);
+  Serial.println("\n\nSmart Power Strip Starting...");
+
   if (!LittleFS.begin(true)) {
     Serial.println("LittleFS Mount Failed");
   } else {
@@ -301,8 +307,6 @@ void setup()
   loadBuffer("/data_24h.bin", buffer24h, SIZE_24H, head24h);
   loadBuffer("/data_30d.bin", buffer30d, SIZE_30D, head30d);
   loadBuffer("/data_12m.bin", buffer12m, size_12M, head12m);
-
-  Serial.println("Buffers loaded from flash.");
 
   pinMode(RELAY_PIN_1, OUTPUT);
   digitalWrite(RELAY_PIN_1, LOW);
@@ -368,10 +372,20 @@ void setup()
 void loop()
 {
 
+  unsigned long now = millis();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    if (now - lastWifiCheck >= WIFI_TIMEOUT) {
+      Serial.println("Lost WiFi. Attempting to reconnect...");
+      WiFi.disconnect();
+      WiFi.reconnect();
+      lastWifiCheck = now;
+    }
+  }
+
   webSocket.loop();
 
   static unsigned long lastOneSec = 0;
-  unsigned long now = millis();
 
   if (now - lastOneSec >= 1000)
   {
