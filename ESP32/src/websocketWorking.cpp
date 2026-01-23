@@ -2,7 +2,7 @@
 #include <WebSocketsServer.h>
 #include <ESPmDNS.h>
 #include <WiFiManager.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 
 float sumPowerMin = 0;   // total power minute
 float sumPowerHour = 0;  // total power hour
@@ -73,32 +73,128 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 }
 
-void appendCSV(const char* path, String value) {
-  File file = SPIFFS.open(path, FILE_APPEND);
-  if(!file){
-    Serial.print("Error when opening file: "); Serial.println(path);
-    return;
-  }
-  file.println(value);
-  file.close();
-}
-
 void printFile(const char* path)
 {
-  File file = SPIFFS.open(path, FILE_READ);
+  File file = LittleFS.open(path, FILE_READ);
   if (!file)
   {
-    Serial.println("Cannot Open " + String(path));
+    Serial.println("Impossible d'ouvrir " + String(path));
     return;
   }
 
-  Serial.println("---- " + String(path) + "' Content ----");
+  Serial.println("---- Contenu de " + String(path) + " ----");
   while (file.available())
   {
     Serial.write(file.read());
   }
   Serial.println("\n--------------------------");
   file.close();
+}
+
+String readLine(File &file) //to read line by line the csv
+{
+  String line = "";
+  while (file.available())
+  {
+    char c = file.read();
+    if (c == '\n') break;
+    line += c;
+  }
+  return line;
+}
+
+void appendSlidingCSV(const char* path, String value, int maxLines)
+{
+  std::vector<String> lines;
+
+  // read the file
+  if (LittleFS.exists(path))
+  {
+    File file = LittleFS.open(path, FILE_READ);
+    if (file)
+    {
+      while (file.available())
+      {
+        String line = readLine(file);
+        if (line.length() > 0)
+          lines.push_back(line);
+      }
+      file.close();
+    }
+  }
+
+  // if aboce maximum amount, remove oldest
+  if (lines.size() >= maxLines)
+  {
+    lines.erase(lines.begin());
+  }
+
+  // Add new value
+  lines.push_back(value);
+
+  // Re-write the file
+  File file = LittleFS.open(path, FILE_WRITE);
+  if (!file)
+  {
+    Serial.println("Erreur écriture " + String(path));
+    return;
+  }
+
+  for (String &l : lines)
+  {
+    file.println(l);
+  }
+  file.close();
+}
+
+void debugCSVSliding(const char* path, int maxLines) // remove this function when it will work
+{
+  if (!LittleFS.exists(path))
+  {
+    Serial.println(String("[DEBUG] ") + path + " n'existe pas");
+    return;
+  }
+
+  File file = LittleFS.open(path, FILE_READ);
+  if (!file)
+  {
+    Serial.println(String("[DEBUG] Impossible d'ouvrir ") + path);
+    return;
+  }
+
+  int lineCount = 0;
+  String firstLine = "";
+  String lastLine = "";
+
+  while (file.available())
+  {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+
+    if (lineCount == 0)
+      firstLine = line;
+
+    lastLine = line;
+    lineCount++;
+  }
+
+  file.close();
+
+  Serial.println("------ DEBUG CSV ------");
+  Serial.println("Fichier : " + String(path));
+  Serial.println("Lignes  : " + String(lineCount) + " / " + String(maxLines));
+  Serial.println("Première: " + firstLine);
+  Serial.println("Dernière: " + lastLine);
+
+  if (lineCount > maxLines)
+    Serial.println("⚠️ ERREUR : dépassement de limite !");
+  else if (lineCount == maxLines)
+    Serial.println("✅ Taille max atteinte (glissement OK)");
+  else
+    Serial.println("⏳ Remplissage en cours");
+
+  Serial.println("-----------------------\n");
 }
 
 void setup()
@@ -119,12 +215,17 @@ void setup()
   pinMode(SENSOR_PIN_1, INPUT);
 
   // ---------------------
-  //        SPIFFS
+  //       LittleFS
   // ---------------------
-  if (!SPIFFS.begin(true))
+  if (!LittleFS.begin(true))
   {
-    Serial.println("Erreur SPIFFS");
+    Serial.println("Erreur LittleFS");
   }
+  else
+  {
+    Serial.println("LittleFS monté avec succès");
+  }
+  LittleFS.begin(false); //to avoid emptying the files
 
   // ---------------------
   //      WiFiManager
@@ -235,8 +336,11 @@ void loop()
 
     if (countSec >= 60)
     {
-      appendCSV("/minute.csv", String(sumPowerMin, 2));
+      appendSlidingCSV("/minute.csv", String(sumPowerMin, 2), 60);
+
       printFile("/minute.csv"); // debug
+
+      debugCSVSliding("/minute.csv", 60); //debug
 
       sumPowerHour += sumPowerMin; // add for hour
       countMin++;
@@ -249,7 +353,8 @@ void loop()
       // ======================
       if (countMin >= 60)
       {
-        appendCSV("/hour.csv", String(sumPowerHour, 2));
+        appendSlidingCSV("/hour.csv", String(sumPowerHour, 2), 24);
+
         sumPowerDay += sumPowerHour; // add for day
         countHour++;
 
@@ -261,7 +366,8 @@ void loop()
         // ======================
         if (countHour >= 24)
         {
-          appendCSV("/day.csv", String(sumPowerDay, 2));
+          appendSlidingCSV("/day.csv", String(sumPowerDay, 2), 30);
+
           sumPowerMonth += sumPowerDay; // add for month
           countDay++;
 
@@ -273,7 +379,8 @@ void loop()
           // ======================
           if (countDay >= 30)
           {
-            appendCSV("/month.csv", String(sumPowerMonth, 2));
+            appendSlidingCSV("/month.csv", String(sumPowerMonth, 2), 12);
+
             sumPowerYear += sumPowerMonth; // add for year
             countMonth++;
 
@@ -285,7 +392,7 @@ void loop()
             // ======================
             if (countMonth >= 12)
             {
-              appendCSV("/year.csv", String(sumPowerYear, 2));
+              appendSlidingCSV("/year.csv", String(sumPowerYear, 2), 10); // ex : 10 years
               sumPowerYear = 0;
               countMonth = 0;
             }
