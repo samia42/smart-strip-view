@@ -11,15 +11,18 @@ WiFiManager wifiManager;
 
 const int savePeriod = 15; // in minutes
 
-const int SENSOR_PIN_1 = 34;
-const int RELAY_PIN_1 = 14;
+const int SENSOR_PIN_1 = 36;
+const int SENSOR_PIN_2 = 39;
+const int RELAY_PIN_1 = 25;
 
 // Current sensor parameters
-const float SENSITIVITY = 0.100;
+const float SENSITIVITY_1 = 0.100; // sensor 1 sensitivity
+const float SENSITIVITY_2 = 0.185; // sensor 2 sensitivity
 const float VREF = 3.3;
 const int ADC_RES = 4095;
 const float RESISTOR_MULTIPLIER = 1.545454;
-float measuredOffset = 2.5;
+float measuredOffset1 = 2.5;
+float measuredOffset2 = 2.5;
 
 // NTP server for time synchronization
 const char *ntpServer = "pool.ntp.org";
@@ -243,7 +246,7 @@ String getFullWebJSON()
 }
 
 // Measure AC current
-float getACCurrent(int sensorPin)
+float getACCurrent(int sensorPin, float sensitivity, float offset)
 {
   float sumSquares = 0;
   long sampleCount = 0;
@@ -253,12 +256,25 @@ float getACCurrent(int sensorPin)
     int adcValue = analogRead(sensorPin);
     float voltagePin = (adcValue * VREF) / ADC_RES;
     float voltageOriginal = voltagePin * RESISTOR_MULTIPLIER;
-    float currentInst = (voltageOriginal - measuredOffset) / SENSITIVITY;
+    float currentInst = (voltageOriginal - offset) / sensitivity;
     sumSquares += (currentInst * currentInst);
     sampleCount++;
   }
   float rms = sqrt(sumSquares / sampleCount);
   return rms;
+}
+
+// Helper function to get debug info for a sensor
+void printSensorDebug(int sensorPin, const char *label)
+{
+  int raw = analogRead(sensorPin);
+  float voltagePin = (raw * VREF) / ADC_RES;
+  float voltageOriginal = voltagePin * RESISTOR_MULTIPLIER;
+  Serial.print(label);
+  Serial.print(" RAW: ");
+  Serial.print(raw);
+  Serial.print(" | Vpin: ");
+  Serial.print(voltagePin, 3);
 }
 
 // Handle incoming WebSocket events from the web app
@@ -293,9 +309,12 @@ void setup()
   delay(5000);
   Serial.println("\n\nSmart Power Strip Starting...");
 
-  if (!LittleFS.begin(true)) {
+  if (!LittleFS.begin(true))
+  {
     Serial.println("LittleFS Mount Failed");
-  } else {
+  }
+  else
+  {
     Serial.println("LittleFS OK");
   }
 
@@ -311,6 +330,7 @@ void setup()
   pinMode(RELAY_PIN_1, OUTPUT);
   digitalWrite(RELAY_PIN_1, LOW);
   pinMode(SENSOR_PIN_1, INPUT);
+  pinMode(SENSOR_PIN_2, INPUT);
 
   // WiFi setup
   const char *customHead = R"raw()raw";
@@ -353,16 +373,22 @@ void setup()
   fillGapsAfterBoot();
 
   // Calibrate sensor offset
-  float sum = 0.0;
+  float sum1 = 0.0;
+  float sum2 = 0.0;
   for (int i = 0; i < 100; i++)
   {
-    float vPin = (analogRead(SENSOR_PIN_1) * VREF) / ADC_RES;
-    sum += vPin * RESISTOR_MULTIPLIER;
+    float vPin1 = (analogRead(SENSOR_PIN_1) * VREF) / ADC_RES;
+    float vPin2 = (analogRead(SENSOR_PIN_2) * VREF) / ADC_RES;
+    sum1 += vPin1 * RESISTOR_MULTIPLIER;
+    sum2 += vPin2 * RESISTOR_MULTIPLIER;
     delay(10);
   }
-  measuredOffset = sum / 100.0;
-  Serial.print("Initial offset: ");
-  Serial.println(measuredOffset, 3);
+  measuredOffset1 = sum1 / 100.0;
+  measuredOffset2 = sum2 / 100.0;
+  Serial.print("Initial offset sensor1: ");
+  Serial.println(measuredOffset1, 3);
+  Serial.print("Initial offset sensor2: ");
+  Serial.println(measuredOffset2, 3);
 
   // Start WebSocket server
   webSocket.begin();
@@ -374,8 +400,10 @@ void loop()
 
   unsigned long now = millis();
 
-  if (WiFi.status() != WL_CONNECTED) {
-    if (now - lastWifiCheck >= WIFI_TIMEOUT) {
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    if (now - lastWifiCheck >= WIFI_TIMEOUT)
+    {
       Serial.println("Lost WiFi. Attempting to reconnect...");
       WiFi.disconnect();
       WiFi.reconnect();
@@ -392,16 +420,25 @@ void loop()
     lastOneSec = now;
 
     // Measure current and broadcast live data
-    float currentInst = getACCurrent(SENSOR_PIN_1);
+    float current1 = getACCurrent(SENSOR_PIN_1, SENSITIVITY_1, measuredOffset1);
+    float current2 = getACCurrent(SENSOR_PIN_2, SENSITIVITY_2, measuredOffset2);
     int relayState = digitalRead(RELAY_PIN_1);
-    Serial.print("Current: ");
-    Serial.print(currentInst, 2);
+
+    // Print debug info for both sensors
+    printSensorDebug(SENSOR_PIN_1, "Sensor 1");
+    Serial.print(" | ");
+    printSensorDebug(SENSOR_PIN_2, "Sensor 2");
+    Serial.println();
+
+    // Print AC RMS current for both sensors
+    Serial.print("Sensor 1 AC RMS: ");
+    Serial.print(current1, 3);
+    Serial.print(" A | Sensor 2 AC RMS: ");
+    Serial.print(current2, 3);
     Serial.println(" A");
-    String liveJson = "{\"live\": " + String(currentInst, 2) + ", \"relay\": " + String(relayState) + "}";
-    webSocket.broadcastTXT(liveJson);
 
     // Add data for minute, 15min, day, month
-    sumForMinute += currentInst;
+    sumForMinute += current1;
     countForMinute++;
     struct tm timeinfo;
     if (getLocalTime(&timeinfo))
