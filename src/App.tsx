@@ -9,6 +9,7 @@ import DashboardOverview from "./pages/DashboardOverview";
 import DeviceMonitoring from "./pages/DeviceMonitoring";
 import Consumption from "./pages/Consumption";
 import Settings from "./pages/Settings";
+import WebSocket from "./pages/WebSocket";
 import NotFound from "./pages/NotFound";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -28,6 +29,8 @@ const App = () => (
               <Route path="/devices" element={<DeviceMonitoring />} />
               <Route path="/consumption" element={<Consumption />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/websocket" element={<WebSocket />} />
+
               <Route path="*" element={<NotFound />} />
             </Routes>
           </div>

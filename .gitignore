@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# ESP32 - platformio
+ESP32/.pio/
+ESP32/.vscode/
+ESP32/.gitignore
+platformio.ini
