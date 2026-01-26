@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { socketsData, SocketData } from "@/data/mockData";
 import {
   buildSocketHistory,
@@ -71,7 +78,7 @@ export const PowerStripProvider = ({
     rate: 0.15,
     currency: "USD",
   });
-  
+
   // WebSocket state
   const [liveData, setLiveData] = useState<LiveData>({ live: 0, relay: 0 });
   const [historyData, setHistoryData] = useState<HistoryData | null>(null);
@@ -185,7 +192,7 @@ export const PowerStripProvider = ({
     if (historyData) {
       let dataArray: number[] = [];
       let timeStep = 60000; // 1 minute in milliseconds
-      
+
       switch (range) {
         case "last_hour":
           dataArray = historyData.graph_60m || [];
@@ -207,15 +214,15 @@ export const PowerStripProvider = ({
           dataArray = historyData.graph_24h || [];
           timeStep = 3600000;
       }
-      
+
       // Convert array to ConsumptionPoint[]
       const now = Date.now();
       return dataArray.map((value, index) => ({
         timestamp: now - (dataArray.length - index - 1) * timeStep,
-        value: value
+        value: value,
       }));
     }
-    
+
     // Fallback to mock data if no WebSocket data available
     if (outletId === "all") {
       const allSeries = sockets

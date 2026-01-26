@@ -40,7 +40,7 @@ const DashboardOverview = () => {
 
   const chartSeries = getConsumptionSeries(
     "all",
-    mapGraphRange(overviewRangeKey)
+    mapGraphRange(overviewRangeKey),
   );
   const chartData = chartSeries.map((point) => {
     const date = new Date(point.timestamp);
@@ -108,7 +108,9 @@ const DashboardOverview = () => {
         <Col lg={4}>
           <Card className="h-100 border-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
             <Card.Body>
-              <Card.Title className="mb-3 text-white">Top Consuming Devices</Card.Title>
+              <Card.Title className="mb-3 text-white">
+                Top Consuming Devices
+              </Card.Title>
               <ListGroup variant="flush">
                 {topConsumers.map((socket) => {
                   const estimatedCost =

@@ -34,8 +34,12 @@ const WebSocketPage = () => {
         <Card.Body>
           <div className="row align-items-center">
             <div className="col-6">
-              <h6 className="text-uppercase text-light opacity-75">Current Consumption</h6>
-              <div className="display-4 fw-bold">{liveData.live.toFixed(2)} A</div>
+              <h6 className="text-uppercase text-light opacity-75">
+                Current Consumption
+              </h6>
+              <div className="display-4 fw-bold">
+                {liveData.live.toFixed(2)} A
+              </div>
             </div>
             <div className="col-6 text-end">
               <Button
@@ -70,7 +74,7 @@ const WebSocketPage = () => {
               fontSize: "0.9rem",
               lineHeight: "1.5",
               whiteSpace: "pre",
-              overflowX: "auto"
+              overflowX: "auto",
             }}
           >
             {formatJson(historyData)}
