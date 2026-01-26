@@ -1,4 +1,4 @@
-import { Card } from "react-bootstrap";
+import { Card, Form } from "react-bootstrap";
 import {
   Line,
   LineChart,
@@ -17,16 +17,42 @@ interface ConsumptionChartProps {
   title: string;
   data: ConsumptionPoint[];
   unit?: string;
+  rangeValue?: string;
+  rangeOptions?: { value: string; label: string }[];
+  onRangeChange?: (value: string) => void;
 }
 
-const ConsumptionChart = ({ title, data, unit = "W" }: ConsumptionChartProps) => {
+const ConsumptionChart = ({
+  title,
+  data,
+  unit = "W",
+  rangeValue,
+  rangeOptions,
+  onRangeChange,
+}: ConsumptionChartProps) => {
   return (
-    <Card bg="dark" text="white" className="border-secondary h-100">
+    <Card className="h-100 border-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
       <Card.Body>
-        <Card.Title className="mb-4">{title}</Card.Title>
-        <div style={{ height: "280px" }}>
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <Card.Title className="mb-0 text-white">{title}</Card.Title>
+          {rangeOptions && rangeOptions.length > 0 && (
+            <Form.Select
+              value={rangeValue}
+              onChange={(event) => onRangeChange?.(event.target.value)}
+              className="bg-slate-900 border-slate-700 text-white"
+              style={{ maxWidth: "200px" }}
+            >
+              {rangeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Form.Select>
+          )}
+        </div>
+        <div className="px-2" style={{ height: "280px" }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
+            <LineChart data={data} margin={{ top: 12, right: 16, left: 4, bottom: 8 }}>
               <XAxis
                 dataKey="label"
                 tick={{ fill: "#94a3b8", fontSize: 12 }}

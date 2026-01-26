@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { usePowerStrip } from "@/context/PowerStripContext";
 
 const DeviceMonitoring = () => {
-  const { sockets, toggleSocket, renameSocket, currentAlert } = usePowerStrip();
+  const { sockets, toggleSocket, renameSocket } = usePowerStrip();
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
 
@@ -32,41 +32,42 @@ const DeviceMonitoring = () => {
     cancelEditing();
   };
 
-  const handleToggle = (socketId: number, name: string) => {
-    if (currentAlert?.socketId === socketId) {
-      toast.error(`${name} is forced off due to an active alert`);
-      return;
-    }
+  const handleToggle = (socketId: number) => {
     toggleSocket(socketId);
   };
 
   return (
     <Container fluid>
       <div className="mb-4">
-        <h1 className="text-white fw-bold mb-2">Device Monitoring</h1>
-        <p className="text-muted">Control each outlet with live power readings</p>
+        <h1 className="text-white fw-bold mb-2 mt-4">Device Monitoring</h1>
+        <p className="text-slate-400">
+          Control each outlet with live power readings
+        </p>
       </div>
 
       <Row className="g-4">
         {visibleSockets.map((socket) => {
           const isEditing = editingId === socket.id;
-          const isAlerted = currentAlert?.socketId === socket.id;
           return (
             <Col key={socket.id} md={6} lg={4}>
-              <Card bg="dark" text="white" className="h-100 border-secondary">
+              <Card className="h-100 border-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
                 <Card.Body className="d-flex flex-column gap-3">
                   <div className="d-flex justify-content-between align-items-start gap-2">
                     <div className="flex-grow-1">
-                      <div className="text-muted small">Outlet {socket.id}</div>
+                      <div className="text-slate-400 small">
+                        Outlet {socket.id}
+                      </div>
                       {isEditing ? (
                         <Form.Control
                           value={draftName}
                           onChange={(event) => setDraftName(event.target.value)}
                           size="sm"
-                          className="bg-secondary border-secondary text-white mt-1"
+                          className="bg-slate-900 border-slate-700 text-white mt-1"
                         />
                       ) : (
-                        <div className="fw-bold mt-1">{socket.name}</div>
+                        <div className="fw-bold mt-1 text-white">
+                          {socket.name}
+                        </div>
                       )}
                     </div>
                     {isEditing ? (
@@ -92,31 +93,34 @@ const DeviceMonitoring = () => {
 
                   {isEditing && (
                     <div className="d-flex justify-content-end">
-                      <Button variant="link" size="sm" className="text-muted" onClick={cancelEditing}>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="text-slate-400"
+                        onClick={cancelEditing}
+                      >
                         Cancel
                       </Button>
                     </div>
                   )}
 
                   <div>
-                    <div className="d-flex align-items-center gap-2 text-muted small mb-1">
+                    <div className="d-flex align-items-center gap-2 text-slate-400 small mb-1">
                       <Zap size={14} />
                       Current Wattage
                     </div>
-                    <div className="display-6 fw-bold text-primary">{socket.currentPower}W</div>
-                    {isAlerted && (
-                      <div className="text-warning small mt-1">Alert active - outlet forced off</div>
-                    )}
+                    <div className="display-6 fw-bold text-primary">
+                      {socket.currentPower}W
+                    </div>
                   </div>
 
                   <div className="mt-auto d-flex align-items-center justify-content-between">
-                    <span className="text-muted small">Power</span>
+                    <span className="text-slate-400 small">Power</span>
                     <Form.Check
                       type="switch"
                       id={`socket-${socket.id}-toggle`}
                       checked={socket.status === "on"}
-                      onChange={() => handleToggle(socket.id, socket.name)}
-                      disabled={isAlerted}
+                      onChange={() => handleToggle(socket.id)}
                       className="text-white"
                     />
                   </div>

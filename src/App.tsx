@@ -21,7 +21,7 @@ const App = () => (
       <Sonner />
       <PowerStripProvider>
         <BrowserRouter>
-          <div className="min-vh-100 bg-dark">
+          <div className="min-vh-100 bg-slate-950">
             <Navigation />
             <Routes>
               <Route path="/" element={<DashboardOverview />} />

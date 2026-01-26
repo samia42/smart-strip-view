@@ -23,7 +23,7 @@ const MetricCard = ({ title, value, subtitle, icon: Icon, variant = "primary", t
   };
 
   return (
-    <div className="h-full rounded-lg border bg-slate-950 border-slate-800 text-slate-100 shadow-xl p-6 transition-all hover:border-slate-700">
+    <div className="h-full rounded-3xl border border-slate-700/60 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 shadow-[0_30px_80px_rgba(15,23,42,0.55)] p-6 transition-all hover:border-slate-500/70">
       
       <div className="flex justify-between items-start">
         <div>
@@ -31,7 +31,7 @@ const MetricCard = ({ title, value, subtitle, icon: Icon, variant = "primary", t
           <h3 className="text-3xl font-bold text-slate-100 mt-2">{value}</h3>
         </div>
         
-        <div className={cn("p-3 rounded-xl", variantStyles[variant])}>
+        <div className={cn("p-3 rounded-2xl shadow-lg", variantStyles[variant])}>
           <Icon size={24} />
         </div>
       </div>
