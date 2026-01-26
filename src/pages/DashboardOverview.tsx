@@ -77,7 +77,7 @@ const DashboardOverview = () => {
         <Col md={6} lg={6}>
           <MetricCard
             title="Total SmartPowerStrip Consumption"
-            value={`${totalPower}W`}
+            value={`${totalPower}Wh`}
             subtitle="Current usage across all outlets"
             icon={Zap}
             variant="primary"
