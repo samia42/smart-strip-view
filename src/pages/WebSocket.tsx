@@ -1,62 +1,8 @@
-import { useEffect, useState } from "react";
 import { Container, Card, Badge, Button } from "react-bootstrap";
-
-type LiveData = {
-  live: number;
-  relay: number; // 0 = OFF, 1 = ON
-};
-
-type HistoryData = {
-  graph_60m: number[];
-  graph_24h: number[];
-  graph_30d: number[];
-  graph_months: number[];
-};
+import { usePowerStrip } from "@/context/PowerStripContext";
 
 const WebSocketPage = () => {
-  const [liveData, setLiveData] = useState<LiveData>({ live: 0, relay: 0 });
-  const [historyData, setHistoryData] = useState<HistoryData | null>(null);
-  const [socket, setSocket] = useState<WebSocket | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
-
-  // WebSocket Connection Logic
-  useEffect(() => {
-    const ws = new WebSocket("ws://SmartPowerStrip.local:81");
-    setSocket(ws);
-
-    ws.onopen = () => {
-      setWsConnected(true);
-      console.log("Connected. Requesting full data...");
-      ws.send("GET_FULL_DATA");
-    };
-
-    ws.onclose = () => {
-      setWsConnected(false);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const json = JSON.parse(event.data);
-
-        // Logic to distinguish between Live data and History data
-        if (json.hasOwnProperty("live")) {
-          setLiveData(json as LiveData);
-        } else if (json.hasOwnProperty("graph_24h")) {
-          setHistoryData(json as HistoryData);
-        }
-      } catch (e) {
-        console.warn("Non-JSON received:", event.data);
-      }
-    };
-
-    ws.onerror = () => {
-      setWsConnected(false);
-    };
-
-    return () => {
-      ws.close();
-    };
-  }, []);
+  const { liveData, historyData, socket, wsConnected } = usePowerStrip();
 
   // Handle Relay Button
   const handleRelayToggle = () => {
@@ -67,7 +13,7 @@ const WebSocketPage = () => {
   };
 
   // Helper to format JSON (adds a newline after every comma separating keys)
-  const formatJson = (data: HistoryData | null) => {
+  const formatJson = (data: typeof historyData) => {
     if (!data) return "Waiting for data...";
     const jsonString = JSON.stringify(data);
     return jsonString.replace(/,"/g, ',\n"');

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Card, Col, Container, Form, Row } from "react-bootstrap";
+import { Card, Col, Container, Form, Row, Badge } from "react-bootstrap";
 import ConsumptionChart from "@/components/Dashboard/ConsumptionChart";
 import { usePowerStrip } from "@/context/PowerStripContext";
 import { TimeRange } from "@/data/powerRetention";
@@ -27,7 +27,7 @@ const mapGraphRange = (rangeKey: string): TimeRange => {
 };
 
 const Consumption = () => {
-  const { sockets, getConsumptionSeries } = usePowerStrip();
+  const { sockets, getConsumptionSeries, wsConnected } = usePowerStrip();
   const [selectedOutlet, setSelectedOutlet] = useState<number | "all">("all");
   const [rangeKey, setRangeKey] = useState("graph_24h");
 
@@ -60,11 +60,16 @@ const Consumption = () => {
 
   return (
     <Container fluid>
-      <div className="mb-4">
-        <h1 className="text-white fw-bold mb-2 mt-4">Consumption</h1>
-        <p className="text-slate-400">
-          Explore power usage across outlets and time ranges
-        </p>
+      <div className="mb-4 d-flex justify-content-between align-items-center">
+        <div>
+          <h1 className="text-white fw-bold mb-2 mt-4">Consumption</h1>
+          <p className="text-slate-400">
+            Explore power usage across outlets and time ranges
+          </p>
+        </div>
+        <Badge bg={wsConnected ? "success" : "secondary"} className="px-3 py-2">
+          {wsConnected ? "Live" : "Offline"}
+        </Badge>
       </div>
 
       <Card className="border-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)] mb-4">

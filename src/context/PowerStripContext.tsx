@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { socketsData, SocketData } from "@/data/mockData";
 import {
   buildSocketHistory,
@@ -7,6 +7,18 @@ import {
   type ConsumptionPoint,
   type TimeRange,
 } from "@/data/powerRetention";
+
+type LiveData = {
+  live: number;
+  relay: number; // 0 = OFF, 1 = ON
+};
+
+type HistoryData = {
+  graph_60m: number[];
+  graph_24h: number[];
+  graph_30d: number[];
+  graph_months: number[];
+};
 
 interface CurrencyOption {
   code: "USD" | "EUR" | "GBP";
@@ -39,6 +51,10 @@ interface PowerStripContextValue {
     range: TimeRange,
   ) => ConsumptionPoint[];
   getCurrencySymbol: () => string;
+  liveData: LiveData;
+  historyData: HistoryData | null;
+  wsConnected: boolean;
+  socket: WebSocket | null;
 }
 
 const PowerStripContext = createContext<PowerStripContextValue | undefined>(
@@ -55,6 +71,51 @@ export const PowerStripProvider = ({
     rate: 0.15,
     currency: "USD",
   });
+  
+  // WebSocket state
+  const [liveData, setLiveData] = useState<LiveData>({ live: 0, relay: 0 });
+  const [historyData, setHistoryData] = useState<HistoryData | null>(null);
+  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+
+  // WebSocket Connection
+  useEffect(() => {
+    const ws = new WebSocket("ws://SmartPowerStrip.local:81");
+    setSocket(ws);
+
+    ws.onopen = () => {
+      setWsConnected(true);
+      console.log("Connected. Requesting full data...");
+      ws.send("GET_FULL_DATA");
+    };
+
+    ws.onclose = () => {
+      setWsConnected(false);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const json = JSON.parse(event.data);
+
+        // Distinguish between Live data and History data
+        if (json.hasOwnProperty("live")) {
+          setLiveData(json as LiveData);
+        } else if (json.hasOwnProperty("graph_24h")) {
+          setHistoryData(json as HistoryData);
+        }
+      } catch (e) {
+        console.warn("Non-JSON received:", event.data);
+      }
+    };
+
+    ws.onerror = () => {
+      setWsConnected(false);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   const basePowerRef = useRef(
     new Map(socketsData.map((socket) => [socket.id, socket.currentPower])),
@@ -120,6 +181,42 @@ export const PowerStripProvider = ({
   };
 
   const getConsumptionSeries = (outletId: number | "all", range: TimeRange) => {
+    // If we have WebSocket history data, use it instead of mock data
+    if (historyData) {
+      let dataArray: number[] = [];
+      let timeStep = 60000; // 1 minute in milliseconds
+      
+      switch (range) {
+        case "last_hour":
+          dataArray = historyData.graph_60m || [];
+          timeStep = 60000; // 1 minute
+          break;
+        case "last_day":
+          dataArray = historyData.graph_24h || [];
+          timeStep = 3600000; // 1 hour
+          break;
+        case "last_month":
+          dataArray = historyData.graph_30d || [];
+          timeStep = 86400000; // 1 day
+          break;
+        case "last_year":
+          dataArray = historyData.graph_months || [];
+          timeStep = 2592000000; // ~30 days
+          break;
+        default:
+          dataArray = historyData.graph_24h || [];
+          timeStep = 3600000;
+      }
+      
+      // Convert array to ConsumptionPoint[]
+      const now = Date.now();
+      return dataArray.map((value, index) => ({
+        timestamp: now - (dataArray.length - index - 1) * timeStep,
+        value: value
+      }));
+    }
+    
+    // Fallback to mock data if no WebSocket data available
     if (outletId === "all") {
       const allSeries = sockets
         .map((socket) => historyMap.get(socket.id))
@@ -152,6 +249,10 @@ export const PowerStripProvider = ({
     getTopConsumers,
     getConsumptionSeries,
     getCurrencySymbol,
+    liveData,
+    historyData,
+    wsConnected,
+    socket,
   };
 
   return (

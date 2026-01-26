@@ -1,4 +1,4 @@
-import { Card, Col, Container, ListGroup, Row } from "react-bootstrap";
+import { Card, Col, Container, ListGroup, Row, Badge } from "react-bootstrap";
 import { DollarSign, Zap } from "lucide-react";
 import { useState } from "react";
 import MetricCard from "@/components/Dashboard/MetricCard";
@@ -14,6 +14,8 @@ const DashboardOverview = () => {
     getTopConsumers,
     getCurrencySymbol,
     costConfig,
+    wsConnected,
+    liveData,
   } = usePowerStrip();
   const totalPower = getTotalConsumption();
   const totalCost = getTotalCost();
@@ -59,11 +61,16 @@ const DashboardOverview = () => {
 
   return (
     <Container fluid>
-      <div className="mb-4">
-        <h1 className="text-white fw-bold mb-2 mt-4">Overview</h1>
-        <p className="text-slate-400">
-          Real-time energy monitoring for your smart power strip
-        </p>
+      <div className="mb-4 d-flex justify-content-between align-items-center">
+        <div>
+          <h1 className="text-white fw-bold mb-2 mt-4">Overview</h1>
+          <p className="text-slate-400">
+            Real-time energy monitoring for your smart power strip
+          </p>
+        </div>
+        <Badge bg={wsConnected ? "success" : "secondary"} className="px-3 py-2">
+          {wsConnected ? "Live" : "Offline"}
+        </Badge>
       </div>
 
       <Row className="g-4 mb-4">
