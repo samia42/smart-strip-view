@@ -6,6 +6,7 @@ import { usePowerStrip } from "@/context/PowerStripContext";
 
 const DeviceMonitoring = () => {
   const { sockets, liveData, toggleSocket, renameSocket } = usePowerStrip();
+
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
 
@@ -111,7 +112,9 @@ const DeviceMonitoring = () => {
                     </div>
                     <div className="display-6 fw-bold text-primary">
                       {socket.id === 1
-                        ? liveData.live.toFixed(2)
+                        ? socket.status === "on"
+                          ? liveData.live.toFixed(2)
+                          : 0
                         : socket.currentPower}{" "}
                       Wh
                     </div>
