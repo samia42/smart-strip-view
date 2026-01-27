@@ -6,23 +6,51 @@
 #include <time.h>
 #include <ArduinoJson.h>
 
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define OLED_SDA 21
+#define OLED_SCL 22
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
 WebSocketsServer webSocket = WebSocketsServer(81);
 WiFiManager wifiManager;
 
 const int savePeriod = 15; // in minutes
 
-const int SENSOR_PIN_1 = 36;
-const int SENSOR_PIN_2 = 39;
-const int RELAY_PIN_1 = 25;
+
+const int CURRENT1_5A_PIN  = 36;
+const int CURRENT1_20A_PIN = 39;
+
+ 
+const int CURRENT2_5A_PIN  = 34;
+const int CURRENT2_20A_PIN = 35;
+
+
+const int CURRENT3_5A_PIN  = 32;
+const int CURRENT3_20A_PIN = 33;
+
+const int RELAY_PIN_1 = 27;
+const int RELAY_PIN_2 = 26;
+const int RELAY_PIN_3 = 25;
 
 // Current sensor parameters
-const float SENSITIVITY_1 = 0.100; // sensor 1 sensitivity
-const float SENSITIVITY_2 = 0.185; // sensor 2 sensitivity
+const float SENSITIVITY_20A = 0.100;
+const float SENSITIVITY_5A  = 0.185;
 const float VREF = 3.3;
 const int ADC_RES = 4095;
 const float RESISTOR_MULTIPLIER = 1.545454;
-float measuredOffset1 = 2.5;
-float measuredOffset2 = 2.5;
+
+float offset1_20A = 2.5;
+float offset1_5A  = 2.5;
+float offset2_20A = 2.5;
+float offset2_5A  = 2.5;
+float offset3_20A = 2.5;
+float offset3_5A  = 2.5;
 
 // NTP server for time synchronization
 const char *ntpServer = "pool.ntp.org";
@@ -264,6 +292,11 @@ float getACCurrent(int sensorPin, float sensitivity, float offset)
   return rms;
 }
 
+float getMergedCurrent(float val20A, float val5A) {
+  if (val5A < 4.5) return val5A;
+  return val20A;
+}
+
 // Helper function to get debug info for a sensor
 void printSensorDebug(int sensorPin, const char *label)
 {
@@ -283,15 +316,35 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   if (type == WStype_TEXT)
   {
     String msg = String((char *)payload);
-    if (msg == "RELAY_ON")
+    if (msg == "RELAY1_ON")
     {
       digitalWrite(RELAY_PIN_1, HIGH);
-      Serial.println("RELAY ON");
+      Serial.println("RELAY1 ON");
     }
-    else if (msg == "RELAY_OFF")
+    else if (msg == "RELAY1_OFF")
     {
       digitalWrite(RELAY_PIN_1, LOW);
-      Serial.println("RELAY OFF");
+      Serial.println("RELAY1 OFF");
+    }
+    else if (msg == "RELAY2_ON")
+    {
+      digitalWrite(RELAY_PIN_2, HIGH);
+      Serial.println("RELAY2 ON");
+    }
+    else if (msg == "RELAY2_OFF")
+    {
+      digitalWrite(RELAY_PIN_2, LOW);
+      Serial.println("RELAY2 OFF");
+    }
+    else if (msg == "RELAY3_ON")
+    {
+      digitalWrite(RELAY_PIN_3, HIGH);
+      Serial.println("RELAY3 ON");
+    }
+    else if (msg == "RELAY3_OFF")
+    {
+      digitalWrite(RELAY_PIN_3, LOW);
+      Serial.println("RELAY3 OFF");
     }
     else if (msg == "GET_FULL_DATA")
     {
@@ -302,12 +355,56 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 }
 
+void updateDisplayState(int r1, float c1, int r2, float c2, int r3, float c3) 
+{
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    
+    int col1_x = 21;
+    int col2_x = 64;
+    int col3_x = 107;
+    
+    if (r3 == HIGH) display.fillCircle(col1_x, 22, 18, SSD1306_WHITE);
+    else display.drawCircle(col1_x, 22, 18, SSD1306_WHITE);
+
+    if (r2 == HIGH) display.fillCircle(col2_x, 22, 18, SSD1306_WHITE);
+    else display.drawCircle(col2_x, 22, 18, SSD1306_WHITE);
+
+    if (r1 == HIGH) display.fillCircle(col3_x, 22, 18, SSD1306_WHITE);
+    else display.drawCircle(col3_x, 22, 18, SSD1306_WHITE);
+
+    display.setTextSize(1);
+
+    display.setCursor(col1_x - 14, 55); 
+    display.print(c3, 2); display.print("A");
+
+    display.setCursor(col2_x - 14, 55);
+    display.print(c2, 2); display.print("A");
+    
+    display.setCursor(col3_x - 14, 55);
+    display.print(c1, 2); display.print("A");
+
+    display.display();
+}
+
 void setup()
 {
   Serial.begin(115200);
 
   delay(5000);
+
   Serial.println("\n\nSmart Power Strip Starting...");
+
+  Wire.begin(OLED_SDA, OLED_SCL);
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    Serial.println(F("SSD1306 allocation failed")); 
+  }
+  display.setRotation(2);
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0,0);
+  display.display();
 
   if (!LittleFS.begin(true))
   {
@@ -328,9 +425,18 @@ void setup()
   loadBuffer("/data_12m.bin", buffer12m, size_12M, head12m);
 
   pinMode(RELAY_PIN_1, OUTPUT);
+  pinMode(RELAY_PIN_2, OUTPUT);
+  pinMode(RELAY_PIN_3, OUTPUT);
   digitalWrite(RELAY_PIN_1, LOW);
-  pinMode(SENSOR_PIN_1, INPUT);
-  pinMode(SENSOR_PIN_2, INPUT);
+  digitalWrite(RELAY_PIN_2, LOW);
+  digitalWrite(RELAY_PIN_3, LOW);
+
+  pinMode(CURRENT1_20A_PIN, INPUT);
+  pinMode(CURRENT1_5A_PIN, INPUT);
+  pinMode(CURRENT2_20A_PIN, INPUT);
+  pinMode(CURRENT2_5A_PIN, INPUT);
+  pinMode(CURRENT3_20A_PIN, INPUT);
+  pinMode(CURRENT3_5A_PIN, INPUT);
 
   // WiFi setup
   const char *customHead = R"raw()raw";
@@ -372,23 +478,29 @@ void setup()
   lastMinute = timeinfo.tm_min;
   fillGapsAfterBoot();
 
-  // Calibrate sensor offset
-  float sum1 = 0.0;
-  float sum2 = 0.0;
+  float sum1_20 = 0, sum1_5 = 0;
+  float sum2_20 = 0, sum2_5 = 0;
+  float sum3_20 = 0, sum3_5 = 0;
+
   for (int i = 0; i < 100; i++)
   {
-    float vPin1 = (analogRead(SENSOR_PIN_1) * VREF) / ADC_RES;
-    float vPin2 = (analogRead(SENSOR_PIN_2) * VREF) / ADC_RES;
-    sum1 += vPin1 * RESISTOR_MULTIPLIER;
-    sum2 += vPin2 * RESISTOR_MULTIPLIER;
-    delay(10);
+    sum1_20 += analogRead(CURRENT1_20A_PIN);
+    sum1_5  += analogRead(CURRENT1_5A_PIN);
+    sum2_20 += analogRead(CURRENT2_20A_PIN);
+    sum2_5  += analogRead(CURRENT2_5A_PIN);
+    sum3_20 += analogRead(CURRENT3_20A_PIN);
+    sum3_5  += analogRead(CURRENT3_5A_PIN);
+    delay(5);
   }
-  measuredOffset1 = sum1 / 100.0;
-  measuredOffset2 = sum2 / 100.0;
-  Serial.print("Initial offset sensor1: ");
-  Serial.println(measuredOffset1, 3);
-  Serial.print("Initial offset sensor2: ");
-  Serial.println(measuredOffset2, 3);
+
+  auto calc = [](float sum) { return ((sum / 100.0) * VREF / ADC_RES) * RESISTOR_MULTIPLIER; };
+  
+  offset1_20A = calc(sum1_20);
+  offset1_5A  = calc(sum1_5);
+  offset2_20A = calc(sum2_20);
+  offset2_5A  = calc(sum2_5);
+  offset3_20A = calc(sum3_20);
+  offset3_5A  = calc(sum3_5);
 
   // Start WebSocket server
   webSocket.begin();
@@ -419,25 +531,47 @@ void loop()
   {
     lastOneSec = now;
 
-    // Measure current and broadcast live data
-    float current1 = getACCurrent(SENSOR_PIN_1, SENSITIVITY_1, measuredOffset1);
-    float current2 = getACCurrent(SENSOR_PIN_2, SENSITIVITY_2, measuredOffset2);
-    int relayState = digitalRead(RELAY_PIN_1);
+    float c1_20 = getACCurrent(CURRENT1_20A_PIN, SENSITIVITY_20A, offset1_20A);
+    float c1_5  = getACCurrent(CURRENT1_5A_PIN, SENSITIVITY_5A, offset1_5A);
+    float current1 = getMergedCurrent(c1_20, c1_5);
 
-    // Print debug info for both sensors
-    printSensorDebug(SENSOR_PIN_1, "Sensor 1");
-    Serial.print(" | ");
-    printSensorDebug(SENSOR_PIN_2, "Sensor 2");
-    Serial.println();
+    float c2_20 = getACCurrent(CURRENT2_20A_PIN, SENSITIVITY_20A, offset2_20A);
+    float c2_5  = getACCurrent(CURRENT2_5A_PIN, SENSITIVITY_5A, offset2_5A);
+    float current2 = getMergedCurrent(c2_20, c2_5);
 
-    // Print AC RMS current for both sensors
-    Serial.print("Sensor 1 AC RMS: ");
-    Serial.print(current1, 3);
-    Serial.print(" A | Sensor 2 AC RMS: ");
-    Serial.print(current2, 3);
-    Serial.println(" A");
+    float c3_20 = getACCurrent(CURRENT3_20A_PIN, SENSITIVITY_20A, offset3_20A);
+    float c3_5  = getACCurrent(CURRENT3_5A_PIN, SENSITIVITY_5A, offset3_5A);
+    float current3 = getMergedCurrent(c3_20, c3_5);
 
-    // Add data for minute, 15min, day, month
+    int relay1State = digitalRead(RELAY_PIN_1);
+    int relay2State = digitalRead(RELAY_PIN_2);
+    int relay3State = digitalRead(RELAY_PIN_3);
+
+    updateDisplayState(relay1State, current1, relay2State, current2, relay3State, current3);
+
+    String jsonLive = "{\"live1\":";
+    jsonLive += String(current1, 2);
+    jsonLive += ",\"live2\":";
+    jsonLive += String(current2, 2);
+    jsonLive += ",\"live3\":";
+    jsonLive += String(current3, 2);
+    jsonLive += ",\"relay\":";
+    jsonLive += String(relay1State);
+    jsonLive += ",\"relay2\":";
+    jsonLive += String(relay2State);
+    jsonLive += ",\"relay3\":";
+    jsonLive += String(relay3State);
+    jsonLive += "}";
+    
+    webSocket.broadcastTXT(jsonLive);
+
+    Serial.println("-----------------------");
+    Serial.printf("1: 20A=%.3f, 5A=%.3f / Merged=%.3fA\n", c1_20, c1_5, current1);
+    Serial.printf("2: 20A=%.3f, 5A=%.3f / Merged=%.3fA\n", c2_20, c2_5, current2);
+    Serial.printf("3: 20A=%.3f, 5A=%.3f / Merged=%.3fA\n", c3_20, c3_5, current3);
+    Serial.println("-----------------------");
+
+    // Add data
     sumForMinute += current1;
     countForMinute++;
     struct tm timeinfo;

@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { Container, Card, Badge, Button } from "react-bootstrap";
 
 type LiveData = {
-  live: number;
-  relay: number; // 0 = OFF, 1 = ON
+  live1: number;
+  live2: number;
+  live3: number;
+  relay: number;  // 0 = OFF, 1 = ON
+  relay2: number;
+  relay3: number;
 };
 
 type HistoryData = {
@@ -14,7 +18,10 @@ type HistoryData = {
 };
 
 const WebSocketPage = () => {
-  const [liveData, setLiveData] = useState<LiveData>({ live: 0, relay: 0 });
+  const [liveData, setLiveData] = useState<LiveData>({ 
+    live1: 0, live2: 0, live3: 0, 
+    relay: 0, relay2: 0, relay3: 0 
+  });
   const [historyData, setHistoryData] = useState<HistoryData | null>(null);
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
@@ -39,7 +46,7 @@ const WebSocketPage = () => {
         const json = JSON.parse(event.data);
 
         // Logic to distinguish between Live data and History data
-        if (json.hasOwnProperty("live")) {
+        if (json.hasOwnProperty("live1")) {
           setLiveData(json as LiveData);
         } else if (json.hasOwnProperty("graph_24h")) {
           setHistoryData(json as HistoryData);
@@ -59,9 +66,12 @@ const WebSocketPage = () => {
   }, []);
 
   // Handle Relay Button
-  const handleRelayToggle = () => {
+  const handleRelayToggle = (outlet: number) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
-      const command = liveData.relay === 1 ? "RELAY_OFF" : "RELAY_ON";
+      let command = "";
+      if (outlet === 1) command = liveData.relay === 1 ? "RELAY1_OFF" : "RELAY1_ON";
+      if (outlet === 2) command = liveData.relay2 === 1 ? "RELAY2_OFF" : "RELAY2_ON";
+      if (outlet === 3) command = liveData.relay3 === 1 ? "RELAY3_OFF" : "RELAY3_ON";
       socket.send(command);
     }
   };
@@ -83,23 +93,69 @@ const WebSocketPage = () => {
         </Badge>
       </div>
 
-      {/* Live Control Card */}
-      <Card bg="secondary" text="white" className="mb-4 border-0 shadow-sm">
+      {/* Live Control Card Outlet 1 */}
+      <Card bg="secondary" text="white" className="mb-3 border-0 shadow-sm">
         <Card.Body>
           <div className="row align-items-center">
             <div className="col-6">
-              <h6 className="text-uppercase text-light opacity-75">Current Consumption</h6>
-              <div className="display-4 fw-bold">{liveData.live.toFixed(2)} A</div>
+              <h6 className="text-uppercase text-light opacity-75">Outlet 1</h6>
+              <div className="display-6 fw-bold">{liveData.live1.toFixed(2)} A</div>
             </div>
             <div className="col-6 text-end">
               <Button
                 variant={liveData.relay === 1 ? "danger" : "success"}
                 size="lg"
-                onClick={handleRelayToggle}
+                onClick={() => handleRelayToggle(1)}
                 disabled={!wsConnected}
                 className="fw-bold px-4"
               >
-                {liveData.relay === 1 ? "TURN OFF" : "TURN ON"}
+                {liveData.relay === 1 ? "Turn off" : "Turn on"}
+              </Button>
+            </div>
+          </div>
+        </Card.Body>
+      </Card>
+
+      {/* Live Control Card Outlet 2 */}
+      <Card bg="secondary" text="white" className="mb-3 border-0 shadow-sm">
+        <Card.Body>
+          <div className="row align-items-center">
+            <div className="col-6">
+              <h6 className="text-uppercase text-light opacity-75">Outlet 2</h6>
+              <div className="display-6 fw-bold">{liveData.live2?.toFixed(2) || "0.00"} A</div>
+            </div>
+            <div className="col-6 text-end">
+              <Button
+                variant={liveData.relay2 === 1 ? "danger" : "success"}
+                size="lg"
+                onClick={() => handleRelayToggle(2)}
+                disabled={!wsConnected}
+                className="fw-bold px-4"
+              >
+                {liveData.relay2 === 1 ? "Turn off" : "Turn on"}
+              </Button>
+            </div>
+          </div>
+        </Card.Body>
+      </Card>
+
+      {/* Live Control Card Outlet 3 */}
+      <Card bg="secondary" text="white" className="mb-4 border-0 shadow-sm">
+        <Card.Body>
+          <div className="row align-items-center">
+            <div className="col-6">
+              <h6 className="text-uppercase text-light opacity-75">Outlet 3</h6>
+              <div className="display-6 fw-bold">{liveData.live3?.toFixed(2) || "0.00"} A</div>
+            </div>
+            <div className="col-6 text-end">
+              <Button
+                variant={liveData.relay3 === 1 ? "danger" : "success"}
+                size="lg"
+                onClick={() => handleRelayToggle(3)}
+                disabled={!wsConnected}
+                className="fw-bold px-4"
+              >
+                {liveData.relay3 === 1 ? "Turn off" : "Turn on"}
               </Button>
             </div>
           </div>
