@@ -147,7 +147,7 @@ const WebSocketPage = () => {
                 <div className="d-flex justify-content-between align-items-center">
                     <div>
                         <h6 className="text-uppercase text-light opacity-75">Outlet 1</h6>
-                        <div className="display-6 fw-bold">{liveData.live1.toFixed(2)} A</div>
+                        <div className="display-6 fw-bold">{liveData.live1.toFixed(2)} W</div>
                     </div>
                     <Button
                         variant={liveData.relay === 1 ? "danger" : "light"}
@@ -167,7 +167,7 @@ const WebSocketPage = () => {
                 <div className="d-flex justify-content-between align-items-center">
                     <div>
                         <h6 className="text-uppercase text-light opacity-75">Outlet 2</h6>
-                        <div className="display-6 fw-bold">{liveData.live2.toFixed(2)} A</div>
+                        <div className="display-6 fw-bold">{liveData.live2.toFixed(2)} W</div>
                     </div>
                     <Button
                         variant={liveData.relay2 === 1 ? "danger" : "light"}
@@ -187,7 +187,7 @@ const WebSocketPage = () => {
                 <div className="d-flex justify-content-between align-items-center">
                     <div>
                         <h6 className="text-uppercase text-light opacity-75">Outlet 3</h6>
-                        <div className="display-6 fw-bold">{liveData.live3.toFixed(2)} A</div>
+                        <div className="display-6 fw-bold">{liveData.live3.toFixed(2)} W</div>
                     </div>
                     <Button
                         variant={liveData.relay3 === 1 ? "danger" : "light"}

@@ -42,6 +42,8 @@ const float VREF = 3.3;
 const int ADC_RES = 4095;
 const float RESISTOR_MULTIPLIER = 1.545454;
 
+const float AC_VOLTAGE = 230.0;
+
 float offset1_20A = 2.5;
 float offset1_5A = 2.5;
 float offset2_20A = 2.5;
@@ -457,15 +459,15 @@ void updateDisplayState(int r1, float c1, int r2, float c2, int r3, float c3)
 
   display.setCursor(col1_x - 14, 55);
   display.print(c3, 2);
-  display.print("A");
+  display.print("W");
 
   display.setCursor(col2_x - 14, 55);
   display.print(c2, 2);
-  display.print("A");
+  display.print("W");
 
   display.setCursor(col3_x - 14, 55);
   display.print(c1, 2);
-  display.print("A");
+  display.print("W");
 
   display.display();
 }
@@ -630,18 +632,22 @@ void loop()
     float c3_5 = getACCurrent(CURRENT3_5A_PIN, SENSITIVITY_5A, offset3_5A);
     float current3 = getMergedCurrent(c3_20, c3_5);
 
+    float power1 = current1 * AC_VOLTAGE;
+    float power2 = current2 * AC_VOLTAGE;
+    float power3 = current3 * AC_VOLTAGE;
+
     int relay1State = digitalRead(RELAY_PIN_1);
     int relay2State = digitalRead(RELAY_PIN_2);
     int relay3State = digitalRead(RELAY_PIN_3);
 
-    updateDisplayState(relay1State, current1, relay2State, current2, relay3State, current3);
+    updateDisplayState(relay1State, power1, relay2State, power2, relay3State, power3);
 
     String jsonLive = "{\"live1\":";
-    jsonLive += String(current1, 2);
+    jsonLive += String(power1, 2);
     jsonLive += ",\"live2\":";
-    jsonLive += String(current2, 2);
+    jsonLive += String(power2, 2);
     jsonLive += ",\"live3\":";
-    jsonLive += String(current3, 2);
+    jsonLive += String(power3, 2);
     jsonLive += ",\"relay\":";
     jsonLive += String(relay1State);
     jsonLive += ",\"relay2\":";
@@ -653,15 +659,15 @@ void loop()
     webSocket.broadcastTXT(jsonLive);
 
     Serial.println("-----------------------");
-    Serial.printf("1: 20A=%.3f, 5A=%.3f / Merged=%.3fA\n", c1_20, c1_5, current1);
-    Serial.printf("2: 20A=%.3f, 5A=%.3f / Merged=%.3fA\n", c2_20, c2_5, current2);
-    Serial.printf("3: 20A=%.3f, 5A=%.3f / Merged=%.3fA\n", c3_20, c3_5, current3);
+    Serial.printf("1: 20A=%.3f, 5A=%.3f / Merged=%.3fA -> %.1fW\n", c1_20, c1_5, current1, power1);
+    Serial.printf("2: 20A=%.3f, 5A=%.3f / Merged=%.3fA -> %.1fW\n", c2_20, c2_5, current2, power2);
+    Serial.printf("3: 20A=%.3f, 5A=%.3f / Merged=%.3fA -> %.1fW\n", c3_20, c3_5, current3, power3);
     Serial.println("-----------------------");
 
     // Add data
-    sumForMinute[0] += current1;
-    sumForMinute[1] += current2;
-    sumForMinute[2] += current3;
+    sumForMinute[0] += power1;
+    sumForMinute[1] += power2;
+    sumForMinute[2] += power3;
     countForMinute++;
 
     struct tm timeinfo;
