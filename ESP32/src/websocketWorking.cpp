@@ -22,16 +22,13 @@ WiFiManager wifiManager;
 
 const int savePeriod = 15; // in minutes
 
-
-const int CURRENT1_5A_PIN  = 36;
+const int CURRENT1_5A_PIN = 36;
 const int CURRENT1_20A_PIN = 39;
 
- 
-const int CURRENT2_5A_PIN  = 34;
+const int CURRENT2_5A_PIN = 34;
 const int CURRENT2_20A_PIN = 35;
 
-
-const int CURRENT3_5A_PIN  = 32;
+const int CURRENT3_5A_PIN = 32;
 const int CURRENT3_20A_PIN = 33;
 
 const int RELAY_PIN_1 = 27;
@@ -40,46 +37,49 @@ const int RELAY_PIN_3 = 25;
 
 // Current sensor parameters
 const float SENSITIVITY_20A = 0.100;
-const float SENSITIVITY_5A  = 0.185;
+const float SENSITIVITY_5A = 0.185;
 const float VREF = 3.3;
 const int ADC_RES = 4095;
 const float RESISTOR_MULTIPLIER = 1.545454;
 
 float offset1_20A = 2.5;
-float offset1_5A  = 2.5;
+float offset1_5A = 2.5;
 float offset2_20A = 2.5;
-float offset2_5A  = 2.5;
+float offset2_5A = 2.5;
 float offset3_20A = 2.5;
-float offset3_5A  = 2.5;
+float offset3_5A = 2.5;
 
 // NTP server for time synchronization
 const char *ntpServer = "pool.ntp.org";
 
-// Buffers for historical data
+// Buffers for historical data - [plug_idx][time_idx]
 const int SIZE_24H = int(24 * 60 / savePeriod);
-float buffer24h[SIZE_24H];
+float buffer24h[3][SIZE_24H];
 int head24h = 0;
 
 const int SIZE_30D = 30;
-float buffer30d[SIZE_30D];
+float buffer30d[3][SIZE_30D];
 int head30d = 0;
 
 const int size_12M = 12;
-float buffer12m[size_12M];
+float buffer12m[3][size_12M];
 int head12m = 0;
 
 // RAM buffer for minute history
-float ramHistoryMinutes[60];
+float ramHistoryMinutes[3][60];
 int headRamMinutes = 0;
 
 // Sums and counters for averaging
-float sumForMinute = 0;
+float sumForMinute[3] = {0, 0, 0};
 int countForMinute = 0;
-float sumFor15Min = 0;
+
+float sumFor15Min[3] = {0, 0, 0};
 int countFor15Min = 0;
-float sumForDay = 0;
+
+float sumForDay[3] = {0, 0, 0};
 int countForDay = 0;
-float sumForMonth = 0;
+
+float sumForMonth[3] = {0, 0, 0};
 int countForMonth = 0;
 
 // Last time markers for period transitions
@@ -126,19 +126,19 @@ void loadLastWriteTime()
 
 // Save a circular buffer to flash
 template <typename T>
-void saveBuffer(const char *path, T *buffer, int size, int head)
+void saveBuffer(const char *path, T *buffer, int totalElements, int head)
 {
   File file = LittleFS.open(path, FILE_WRITE);
   if (!file)
     return;
   file.write((uint8_t *)&head, sizeof(head));
-  file.write((uint8_t *)buffer, size * sizeof(T));
+  file.write((uint8_t *)buffer, totalElements * sizeof(T));
   file.close();
 }
 
 // Load a circular buffer from flash
 template <typename T>
-void loadBuffer(const char *path, T *buffer, int size, int &head)
+void loadBuffer(const char *path, T *buffer, int totalElements, int &head)
 {
   if (!LittleFS.exists(path))
   {
@@ -151,15 +151,14 @@ void loadBuffer(const char *path, T *buffer, int size, int &head)
     {
       int zeroHead = 0;
       file.write((uint8_t *)&zeroHead, sizeof(zeroHead));
-      file.write((uint8_t *)buffer, size * sizeof(T));
+      // Write zeros
+      for (int i = 0; i < totalElements; i++)
+      {
+        T zero = 0;
+        file.write((uint8_t *)&zero, sizeof(T));
+      }
       file.close();
-      Serial.println("File created successfully.");
     }
-    else
-    {
-      Serial.println("Failed to create file!");
-    }
-
     head = 0;
     return;
   }
@@ -167,44 +166,61 @@ void loadBuffer(const char *path, T *buffer, int size, int &head)
   File file = LittleFS.open(path, "r");
   if (file)
   {
-    if (file.size() == (sizeof(head) + size * sizeof(T)))
+    size_t expectedSize = sizeof(head) + (totalElements * sizeof(T));
+    if (file.size() == expectedSize)
     {
       file.read((uint8_t *)&head, sizeof(head));
-      file.read((uint8_t *)buffer, size * sizeof(T));
+      file.read((uint8_t *)buffer, totalElements * sizeof(T));
+    }
+    else
+    {
+      Serial.println("File size mismatch (structure changed?), resetting.");
+      file.close();
+      LittleFS.remove(path);
+      loadBuffer(path, buffer, totalElements, head); // Recursively create new
+      return;
     }
     file.close();
   }
 }
 
-// Add a value to the RAM minute buffer
-void addToRamMinutes(float val)
+// Add values for all 3 plugs to the RAM minute buffer
+void addToRamMinutes(float p1, float p2, float p3)
 {
-  ramHistoryMinutes[headRamMinutes] = val;
+  ramHistoryMinutes[0][headRamMinutes] = p1;
+  ramHistoryMinutes[1][headRamMinutes] = p2;
+  ramHistoryMinutes[2][headRamMinutes] = p3;
   headRamMinutes = (headRamMinutes + 1) % 60;
 }
 
-// Add a value to the 24h buffer and save to flash
-void addTo24hBuffer(float val)
+// Add values and save 24h buffer
+void addTo24hBuffer(float p1, float p2, float p3)
 {
-  buffer24h[head24h] = val;
+  buffer24h[0][head24h] = p1;
+  buffer24h[1][head24h] = p2;
+  buffer24h[2][head24h] = p3;
   head24h = (head24h + 1) % SIZE_24H;
-  saveBuffer("/data_24h.bin", buffer24h, SIZE_24H, head24h);
+  saveBuffer("/data_24h.bin", (float *)buffer24h, 3 * SIZE_24H, head24h);
 }
 
-// Add a value to the 30d buffer and save to flash
-void addTo30dBuffer(float val)
+// Add values and save 30d buffer
+void addTo30dBuffer(float p1, float p2, float p3)
 {
-  buffer30d[head30d] = val;
+  buffer30d[0][head30d] = p1;
+  buffer30d[1][head30d] = p2;
+  buffer30d[2][head30d] = p3;
   head30d = (head30d + 1) % SIZE_30D;
-  saveBuffer("/data_30d.bin", buffer30d, SIZE_30D, head30d);
+  saveBuffer("/data_30d.bin", (float *)buffer30d, 3 * SIZE_30D, head30d);
 }
 
-// Add a value to the 12m buffer and save to flash
-void addToMonthsBuffer(float val)
+// Add values and save 12m buffer
+void addToMonthsBuffer(float p1, float p2, float p3)
 {
-  buffer12m[head12m] = val;
+  buffer12m[0][head12m] = p1;
+  buffer12m[1][head12m] = p2;
+  buffer12m[2][head12m] = p3;
   head12m = (head12m + 1) % size_12M;
-  saveBuffer("/data_12m.bin", buffer12m, size_12M, head12m);
+  saveBuffer("/data_12m.bin", (float *)buffer12m, 3 * size_12M, head12m);
 }
 
 // Fill gaps in data after a reboot or power cut
@@ -220,54 +236,94 @@ void fillGapsAfterBoot()
   int missedPoints15m = secondsOffline / (savePeriod * 60);
   if (missedPoints15m > SIZE_24H)
     missedPoints15m = SIZE_24H;
+
   if (missedPoints15m > 0)
   {
-    Serial.print("Power cut detected! Adding ");
+    Serial.print("Power cut: Adding ");
     Serial.print(missedPoints15m);
-    Serial.println(" empty points (0.0) to the 24h graph.");
+    Serial.println(" empty points to 24h.");
     for (int i = 0; i < missedPoints15m; i++)
     {
-      addTo24hBuffer(0.0);
+      addTo24hBuffer(0.0, 0.0, 0.0);
     }
   }
+
   int missedPointsDay = secondsOffline / 86400;
   if (missedPointsDay > SIZE_30D)
     missedPointsDay = SIZE_30D;
+
   if (missedPointsDay > 0)
   {
     for (int i = 0; i < missedPointsDay; i++)
     {
-      addTo30dBuffer(0.0);
+      addTo30dBuffer(0.0, 0.0, 0.0);
     }
   }
   saveLastWriteTime(now);
 }
 
-// Generate JSON string with all historical data for web app
-String getFullWebJSON()
+// Helper to add data to JSON document based on circular buffer
+void addPlugHistory(JsonDocument &doc, const char *rootKey, const char *plugKey, float *buffer, int size, int head)
+{
+  if (!doc.containsKey(rootKey))
+    doc[rootKey].to<JsonObject>();
+  JsonArray arr = doc[rootKey][plugKey].to<JsonArray>();
+  for (int i = 0; i < size; i++)
+  {
+    arr.add(buffer[(head + i) % size]);
+  }
+}
+
+// Graph Types: 0=All, 1=1h, 2=24h, 3=30d, 4=1y
+// Plug IDs: 0=All, 1=Plug1, 2=Plug2, 3=Plug3
+String getHistoryJSON(int plugId, int graphId)
 {
   JsonDocument doc;
 
-  JsonArray arr60m = doc["graph_60m"].to<JsonArray>();
-  for (int i = 0; i < 60; i++)
+  // 1 Minute History (RAM) - "history_1h"
+  if (graphId == 0 || graphId == 1)
   {
-    arr60m.add(ramHistoryMinutes[(headRamMinutes + i) % 60]);
+    if (plugId == 0 || plugId == 1)
+      addPlugHistory(doc, "history_1h", "plug_1", ramHistoryMinutes[0], 60, headRamMinutes);
+    if (plugId == 0 || plugId == 2)
+      addPlugHistory(doc, "history_1h", "plug_2", ramHistoryMinutes[1], 60, headRamMinutes);
+    if (plugId == 0 || plugId == 3)
+      addPlugHistory(doc, "history_1h", "plug_3", ramHistoryMinutes[2], 60, headRamMinutes);
   }
-  JsonArray arr24h = doc["graph_24h"].to<JsonArray>();
-  for (int i = 0; i < SIZE_24H; i++)
+
+  // 15 Min History (Flash) - "history_24h"
+  if (graphId == 0 || graphId == 2)
   {
-    arr24h.add(buffer24h[(head24h + i) % SIZE_24H]);
+    if (plugId == 0 || plugId == 1)
+      addPlugHistory(doc, "history_24h", "plug_1", buffer24h[0], SIZE_24H, head24h);
+    if (plugId == 0 || plugId == 2)
+      addPlugHistory(doc, "history_24h", "plug_2", buffer24h[1], SIZE_24H, head24h);
+    if (plugId == 0 || plugId == 3)
+      addPlugHistory(doc, "history_24h", "plug_3", buffer24h[2], SIZE_24H, head24h);
   }
-  JsonArray arr30d = doc["graph_30d"].to<JsonArray>();
-  for (int i = 0; i < SIZE_30D; i++)
+
+  // Daily History (Flash) - "history_30d"
+  if (graphId == 0 || graphId == 3)
   {
-    arr30d.add(buffer30d[(head30d + i) % SIZE_30D]);
+    if (plugId == 0 || plugId == 1)
+      addPlugHistory(doc, "history_30d", "plug_1", buffer30d[0], SIZE_30D, head30d);
+    if (plugId == 0 || plugId == 2)
+      addPlugHistory(doc, "history_30d", "plug_2", buffer30d[1], SIZE_30D, head30d);
+    if (plugId == 0 || plugId == 3)
+      addPlugHistory(doc, "history_30d", "plug_3", buffer30d[2], SIZE_30D, head30d);
   }
-  JsonArray arrMonths = doc["graph_months"].to<JsonArray>();
-  for (int i = 0; i < size_12M; i++)
+
+  // Monthly History (Flash) - "history_1y"
+  if (graphId == 0 || graphId == 4)
   {
-    arrMonths.add(buffer12m[(head12m + i) % size_12M]);
+    if (plugId == 0 || plugId == 1)
+      addPlugHistory(doc, "history_1y", "plug_1", buffer12m[0], size_12M, head12m);
+    if (plugId == 0 || plugId == 2)
+      addPlugHistory(doc, "history_1y", "plug_2", buffer12m[1], size_12M, head12m);
+    if (plugId == 0 || plugId == 3)
+      addPlugHistory(doc, "history_1y", "plug_3", buffer12m[2], size_12M, head12m);
   }
+
   String output;
   serializeJson(doc, output);
   return output;
@@ -292,8 +348,10 @@ float getACCurrent(int sensorPin, float sensitivity, float offset)
   return rms;
 }
 
-float getMergedCurrent(float val20A, float val5A) {
-  if (val5A < 4.5) return val5A;
+float getMergedCurrent(float val20A, float val5A)
+{
+  if (val5A < 4.5)
+    return val5A;
   return val20A;
 }
 
@@ -316,75 +374,100 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   if (type == WStype_TEXT)
   {
     String msg = String((char *)payload);
+    Serial.println("WS Recv: " + msg);
+
     if (msg == "RELAY1_ON")
     {
       digitalWrite(RELAY_PIN_1, HIGH);
-      Serial.println("RELAY1 ON");
     }
     else if (msg == "RELAY1_OFF")
     {
       digitalWrite(RELAY_PIN_1, LOW);
-      Serial.println("RELAY1 OFF");
     }
     else if (msg == "RELAY2_ON")
     {
       digitalWrite(RELAY_PIN_2, HIGH);
-      Serial.println("RELAY2 ON");
     }
     else if (msg == "RELAY2_OFF")
     {
       digitalWrite(RELAY_PIN_2, LOW);
-      Serial.println("RELAY2 OFF");
     }
     else if (msg == "RELAY3_ON")
     {
       digitalWrite(RELAY_PIN_3, HIGH);
-      Serial.println("RELAY3 ON");
     }
     else if (msg == "RELAY3_OFF")
     {
       digitalWrite(RELAY_PIN_3, LOW);
-      Serial.println("RELAY3 OFF");
     }
-    else if (msg == "GET_FULL_DATA")
+
+    // History Requests: GET_HISTORY [PLUG=x] [TYPE=x]
+    else if (msg.startsWith("GET_HISTORY"))
     {
-      String fullJson = getFullWebJSON();
-      webSocket.sendTXT(num, fullJson);
-      Serial.println("Sent full data JSON to webapp.");
+      int plugId = 0; // 0=All
+      if (msg.indexOf("PLUG=1") >= 0)
+        plugId = 1;
+      if (msg.indexOf("PLUG=2") >= 0)
+        plugId = 2;
+      if (msg.indexOf("PLUG=3") >= 0)
+        plugId = 3;
+
+      int graphId = 0; // 0=All
+      if (msg.indexOf("TYPE=1h") >= 0)
+        graphId = 1;
+      if (msg.indexOf("TYPE=24h") >= 0)
+        graphId = 2;
+      if (msg.indexOf("TYPE=30d") >= 0)
+        graphId = 3;
+      if (msg.indexOf("TYPE=1y") >= 0)
+        graphId = 4;
+
+      String json = getHistoryJSON(plugId, graphId);
+      webSocket.sendTXT(num, json);
+      Serial.printf("Sent history JSON (Size: %d)\n", json.length());
     }
   }
 }
 
-void updateDisplayState(int r1, float c1, int r2, float c2, int r3, float c3) 
+void updateDisplayState(int r1, float c1, int r2, float c2, int r3, float c3)
 {
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
-    
-    int col1_x = 21;
-    int col2_x = 64;
-    int col3_x = 107;
-    
-    if (r3 == HIGH) display.fillCircle(col1_x, 22, 18, SSD1306_WHITE);
-    else display.drawCircle(col1_x, 22, 18, SSD1306_WHITE);
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
 
-    if (r2 == HIGH) display.fillCircle(col2_x, 22, 18, SSD1306_WHITE);
-    else display.drawCircle(col2_x, 22, 18, SSD1306_WHITE);
+  int col1_x = 21;
+  int col2_x = 64;
+  int col3_x = 107;
 
-    if (r1 == HIGH) display.fillCircle(col3_x, 22, 18, SSD1306_WHITE);
-    else display.drawCircle(col3_x, 22, 18, SSD1306_WHITE);
+  if (r3 == HIGH)
+    display.fillCircle(col1_x, 22, 18, SSD1306_WHITE);
+  else
+    display.drawCircle(col1_x, 22, 18, SSD1306_WHITE);
 
-    display.setTextSize(1);
+  if (r2 == HIGH)
+    display.fillCircle(col2_x, 22, 18, SSD1306_WHITE);
+  else
+    display.drawCircle(col2_x, 22, 18, SSD1306_WHITE);
 
-    display.setCursor(col1_x - 14, 55); 
-    display.print(c3, 2); display.print("A");
+  if (r1 == HIGH)
+    display.fillCircle(col3_x, 22, 18, SSD1306_WHITE);
+  else
+    display.drawCircle(col3_x, 22, 18, SSD1306_WHITE);
 
-    display.setCursor(col2_x - 14, 55);
-    display.print(c2, 2); display.print("A");
-    
-    display.setCursor(col3_x - 14, 55);
-    display.print(c1, 2); display.print("A");
+  display.setTextSize(1);
 
-    display.display();
+  display.setCursor(col1_x - 14, 55);
+  display.print(c3, 2);
+  display.print("A");
+
+  display.setCursor(col2_x - 14, 55);
+  display.print(c2, 2);
+  display.print("A");
+
+  display.setCursor(col3_x - 14, 55);
+  display.print(c1, 2);
+  display.print("A");
+
+  display.display();
 }
 
 void setup()
@@ -396,14 +479,15 @@ void setup()
   Serial.println("\n\nSmart Power Strip Starting...");
 
   Wire.begin(OLED_SDA, OLED_SCL);
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
-    Serial.println(F("SSD1306 allocation failed")); 
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+  {
+    Serial.println(F("SSD1306 allocation failed"));
   }
   display.setRotation(2);
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
-  display.setCursor(0,0);
+  display.setCursor(0, 0);
   display.display();
 
   if (!LittleFS.begin(true))
@@ -420,9 +504,11 @@ void setup()
   memset(buffer30d, 0, sizeof(buffer30d));
   memset(buffer12m, 0, sizeof(buffer12m));
   memset(ramHistoryMinutes, 0, sizeof(ramHistoryMinutes));
-  loadBuffer("/data_24h.bin", buffer24h, SIZE_24H, head24h);
-  loadBuffer("/data_30d.bin", buffer30d, SIZE_30D, head30d);
-  loadBuffer("/data_12m.bin", buffer12m, size_12M, head12m);
+
+  // NOTE: loadBuffer now takes 3*SIZE because we cast 2D array to pointer
+  loadBuffer("/data_24h.bin", (float *)buffer24h, 3 * SIZE_24H, head24h);
+  loadBuffer("/data_30d.bin", (float *)buffer30d, 3 * SIZE_30D, head30d);
+  loadBuffer("/data_12m.bin", (float *)buffer12m, 3 * size_12M, head12m);
 
   pinMode(RELAY_PIN_1, OUTPUT);
   pinMode(RELAY_PIN_2, OUTPUT);
@@ -485,22 +571,23 @@ void setup()
   for (int i = 0; i < 100; i++)
   {
     sum1_20 += analogRead(CURRENT1_20A_PIN);
-    sum1_5  += analogRead(CURRENT1_5A_PIN);
+    sum1_5 += analogRead(CURRENT1_5A_PIN);
     sum2_20 += analogRead(CURRENT2_20A_PIN);
-    sum2_5  += analogRead(CURRENT2_5A_PIN);
+    sum2_5 += analogRead(CURRENT2_5A_PIN);
     sum3_20 += analogRead(CURRENT3_20A_PIN);
-    sum3_5  += analogRead(CURRENT3_5A_PIN);
+    sum3_5 += analogRead(CURRENT3_5A_PIN);
     delay(5);
   }
 
-  auto calc = [](float sum) { return ((sum / 100.0) * VREF / ADC_RES) * RESISTOR_MULTIPLIER; };
-  
+  auto calc = [](float sum)
+  { return ((sum / 100.0) * VREF / ADC_RES) * RESISTOR_MULTIPLIER; };
+
   offset1_20A = calc(sum1_20);
-  offset1_5A  = calc(sum1_5);
+  offset1_5A = calc(sum1_5);
   offset2_20A = calc(sum2_20);
-  offset2_5A  = calc(sum2_5);
+  offset2_5A = calc(sum2_5);
   offset3_20A = calc(sum3_20);
-  offset3_5A  = calc(sum3_5);
+  offset3_5A = calc(sum3_5);
 
   // Start WebSocket server
   webSocket.begin();
@@ -532,15 +619,15 @@ void loop()
     lastOneSec = now;
 
     float c1_20 = getACCurrent(CURRENT1_20A_PIN, SENSITIVITY_20A, offset1_20A);
-    float c1_5  = getACCurrent(CURRENT1_5A_PIN, SENSITIVITY_5A, offset1_5A);
+    float c1_5 = getACCurrent(CURRENT1_5A_PIN, SENSITIVITY_5A, offset1_5A);
     float current1 = getMergedCurrent(c1_20, c1_5);
 
     float c2_20 = getACCurrent(CURRENT2_20A_PIN, SENSITIVITY_20A, offset2_20A);
-    float c2_5  = getACCurrent(CURRENT2_5A_PIN, SENSITIVITY_5A, offset2_5A);
+    float c2_5 = getACCurrent(CURRENT2_5A_PIN, SENSITIVITY_5A, offset2_5A);
     float current2 = getMergedCurrent(c2_20, c2_5);
 
     float c3_20 = getACCurrent(CURRENT3_20A_PIN, SENSITIVITY_20A, offset3_20A);
-    float c3_5  = getACCurrent(CURRENT3_5A_PIN, SENSITIVITY_5A, offset3_5A);
+    float c3_5 = getACCurrent(CURRENT3_5A_PIN, SENSITIVITY_5A, offset3_5A);
     float current3 = getMergedCurrent(c3_20, c3_5);
 
     int relay1State = digitalRead(RELAY_PIN_1);
@@ -562,7 +649,7 @@ void loop()
     jsonLive += ",\"relay3\":";
     jsonLive += String(relay3State);
     jsonLive += "}";
-    
+
     webSocket.broadcastTXT(jsonLive);
 
     Serial.println("-----------------------");
@@ -572,41 +659,54 @@ void loop()
     Serial.println("-----------------------");
 
     // Add data
-    sumForMinute += current1;
+    sumForMinute[0] += current1;
+    sumForMinute[1] += current2;
+    sumForMinute[2] += current3;
     countForMinute++;
+
     struct tm timeinfo;
     if (getLocalTime(&timeinfo))
     {
       // New minute
       if (timeinfo.tm_min != lastMinute)
       {
-        float avgMinute = (countForMinute > 0) ? sumForMinute / countForMinute : 0;
-        addToRamMinutes(avgMinute);
-        Serial.print("(RAM) Minute saved. Average: ");
-        Serial.print(avgMinute, 3);
-        Serial.println(" A");
-        sumFor15Min += avgMinute;
+        float avgMinute[3];
+        for (int i = 0; i < 3; i++)
+          avgMinute[i] = (countForMinute > 0) ? sumForMinute[i] / countForMinute : 0;
+
+        addToRamMinutes(avgMinute[0], avgMinute[1], avgMinute[2]);
+
+        Serial.printf("(RAM) Minute saved. P1: %.2f P2: %.2f P3: %.2f\n", avgMinute[0], avgMinute[1], avgMinute[2]);
+
+        for (int i = 0; i < 3; i++)
+        {
+          sumFor15Min[i] += avgMinute[i];
+          sumForMinute[i] = 0;
+        }
         countFor15Min++;
-        sumForMinute = 0;
         countForMinute = 0;
 
         // New 15min period
         if (timeinfo.tm_min % savePeriod == 0)
         {
-          float avg15 = (countFor15Min > 0) ? sumFor15Min / countFor15Min : 0;
-          addTo24hBuffer(avg15);
+          float avg15[3];
+          for (int i = 0; i < 3; i++)
+            avg15[i] = (countFor15Min > 0) ? sumFor15Min[i] / countFor15Min : 0;
+
+          addTo24hBuffer(avg15[0], avg15[1], avg15[2]);
+
           time_t now;
           time(&now);
           saveLastWriteTime(now);
-          sumForDay += avg15;
+
+          for (int i = 0; i < 3; i++)
+          {
+            sumForDay[i] += avg15[i];
+            sumFor15Min[i] = 0;
+          }
           countForDay++;
-          Serial.println("\nFLASH SAVE");
-          Serial.println(getFullWebJSON());
-          Serial.println("");
-          String fullJson = getFullWebJSON();
-          Serial.println("Sent full data JSON to webapp.");
-          webSocket.broadcastTXT(fullJson);
-          sumFor15Min = 0;
+
+          Serial.println("\nFLASH SAVE PERIODIC");
           countFor15Min = 0;
         }
         lastMinute = timeinfo.tm_min;
@@ -615,23 +715,33 @@ void loop()
       // New day
       if (timeinfo.tm_mday != lastDay && lastDay != -1)
       {
-        float avgDay = (countForDay > 0) ? sumForDay / countForDay : 0;
-        addTo30dBuffer(avgDay);
-        sumForMonth += avgDay;
+        float avgDay[3];
+        for (int i = 0; i < 3; i++)
+          avgDay[i] = (countForDay > 0) ? sumForDay[i] / countForDay : 0;
+
+        addTo30dBuffer(avgDay[0], avgDay[1], avgDay[2]);
+
+        for (int i = 0; i < 3; i++)
+        {
+          sumForMonth[i] += avgDay[i];
+          sumForDay[i] = 0;
+        }
         countForMonth++;
-        Serial.print("(flash) Day saved. Average: ");
-        Serial.println(avgDay);
-        sumForDay = 0;
+        Serial.println("(flash) Day saved.");
         countForDay = 0;
 
         // New month
         if (timeinfo.tm_mon != lastMonth && lastMonth != -1)
         {
-          float avgMonth = (countForMonth > 0) ? sumForMonth / countForMonth : 0;
-          addToMonthsBuffer(avgMonth);
-          Serial.print("(flash) Month saved. Average: ");
-          Serial.println(avgMonth);
-          sumForMonth = 0;
+          float avgMonth[3];
+          for (int i = 0; i < 3; i++)
+            avgMonth[i] = (countForMonth > 0) ? sumForMonth[i] / countForMonth : 0;
+
+          addToMonthsBuffer(avgMonth[0], avgMonth[1], avgMonth[2]);
+          Serial.println("(flash) Month saved.");
+
+          for (int i = 0; i < 3; i++)
+            sumForMonth[i] = 0;
           countForMonth = 0;
         }
         lastMonth = timeinfo.tm_mon;
