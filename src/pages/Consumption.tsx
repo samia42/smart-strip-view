@@ -67,8 +67,8 @@ const Consumption = () => {
         </p>
       </div>
 
-      <Card className="border-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)] mb-4">
-        <Card.Body>
+      <Card className="rounded-3xl border border-slate-700/60 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)] mb-4">
+        <Card.Body className="p-4">
           <Row className="g-3">
             <Col md={6} lg={4}>
               <Form.Group>
@@ -114,7 +114,7 @@ const Consumption = () => {
       <ConsumptionChart
         title="Consumption Over Time"
         data={chartData}
-        unit="W"
+        unit="kWh"
       />
     </Container>
   );

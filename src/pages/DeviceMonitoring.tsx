@@ -50,8 +50,8 @@ const DeviceMonitoring = () => {
           const isEditing = editingId === socket.id;
           return (
             <Col key={socket.id} md={6} lg={4}>
-              <Card className="h-100 border-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
-                <Card.Body className="d-flex flex-column gap-3">
+              <Card className="h-100 rounded-3xl border border-slate-700/60 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
+                <Card.Body className="d-flex flex-column gap-3 p-4">
                   <div className="d-flex justify-content-between align-items-start gap-2">
                     <div className="flex-grow-1">
                       <div className="text-slate-400 small">
@@ -109,8 +109,13 @@ const DeviceMonitoring = () => {
                       <Zap size={14} />
                       Current Wattage
                     </div>
-                    <div className="display-6 fw-bold text-primary">
-                      {socket.currentPower}W
+                    <div
+                      className={`display-6 fw-bold transition-colors duration-300 ${socket.status === "on"
+                          ? "text-primary"
+                          : "text-slate-600 opacity-50"
+                        }`}
+                    >
+                      {socket.status === "on" ? socket.currentPower : 0}W
                     </div>
                   </div>
 

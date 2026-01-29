@@ -1,6 +1,6 @@
 import { Card, Col, Container, ListGroup, Row } from "react-bootstrap";
 import { DollarSign, Zap } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import MetricCard from "@/components/Dashboard/MetricCard";
 import ConsumptionChart from "@/components/Dashboard/ConsumptionChart";
 import { usePowerStrip } from "@/context/PowerStripContext";
@@ -15,9 +15,25 @@ const DashboardOverview = () => {
     getCurrencySymbol,
     costConfig,
   } = usePowerStrip();
+
+  const getStoredSymbol = () => {
+    const savedCode = localStorage.getItem("app_currency");
+    switch (savedCode) {
+      case "EUR": return "€";
+      case "GBP": return "£";
+      case "USD": return "$";
+      default: return getCurrencySymbol();
+    }
+  };
+
+  const [currencySymbol, setCurrencySymbol] = useState(getStoredSymbol());
+
+  useEffect(() => {
+    setCurrencySymbol(getStoredSymbol());
+  }, [costConfig.currency]);
+
   const totalPower = getTotalConsumption();
   const totalCost = getTotalCost();
-  const currencySymbol = getCurrencySymbol();
   const topConsumers = getTopConsumers(3);
 
   const [overviewRangeKey, setOverviewRangeKey] = useState("graph_24h");
@@ -70,7 +86,7 @@ const DashboardOverview = () => {
         <Col md={6} lg={6}>
           <MetricCard
             title="Total SmartPowerStrip Consumption"
-            value={`${totalPower}W`}
+            value={`${totalPower}kWh`}
             subtitle="Current usage across all outlets"
             icon={Zap}
             variant="primary"
@@ -92,15 +108,15 @@ const DashboardOverview = () => {
           <ConsumptionChart
             title="Total Consumption (Last 24 Hours)"
             data={chartData}
-            unit="W"
+            unit="kWh"
             rangeValue={overviewRangeKey}
             rangeOptions={overviewRangeOptions}
             onRangeChange={setOverviewRangeKey}
           />
         </Col>
         <Col lg={4}>
-          <Card className="h-100 border-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
-            <Card.Body>
+          <Card className="h-100 rounded-3xl border border-slate-700/60 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
+            <Card.Body className="p-4">
               <Card.Title className="mb-3 text-white">Top Consuming Devices</Card.Title>
               <ListGroup variant="flush">
                 {topConsumers.map((socket) => {

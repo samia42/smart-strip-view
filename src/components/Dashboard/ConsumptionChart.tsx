@@ -31,8 +31,8 @@ const ConsumptionChart = ({
   onRangeChange,
 }: ConsumptionChartProps) => {
   return (
-    <Card className="h-100 border-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
-      <Card.Body>
+    <Card className="h-100 rounded-3xl border border-slate-700/60 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
+      <Card.Body className="p-4">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <Card.Title className="mb-0 text-white">{title}</Card.Title>
           {rangeOptions && rangeOptions.length > 0 && (
