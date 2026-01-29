@@ -59,13 +59,13 @@ const int SIZE_24H = int(24 * 60 / savePeriod);
 float buffer24h[3][SIZE_24H];
 int head24h = 0;
 
-const int SIZE_30D = 30;
-float buffer30d[3][SIZE_30D];
-int head30d = 0;
+const int SIZE_31D = 31;
+float buffer30d[3][SIZE_31D];
+int head31d = 0;
 
-const int size_12M = 12;
-float buffer12m[3][size_12M];
-int head12m = 0;
+const int SIZE_MONTHS = 60; // 5 years of monthly data
+float buffer12m[3][SIZE_MONTHS];
+int headmonths = 0;
 
 // RAM buffer for minute history
 float ramHistoryMinutes[3][60];
@@ -196,33 +196,45 @@ void addToRamMinutes(float p1, float p2, float p3)
 }
 
 // Add values and save 24h buffer
-void addTo24hBuffer(float p1, float p2, float p3)
+void addTo24hBuffer(float p1, float p2, float p3, bool save = true)
 {
   buffer24h[0][head24h] = p1;
   buffer24h[1][head24h] = p2;
   buffer24h[2][head24h] = p3;
   head24h = (head24h + 1) % SIZE_24H;
-  saveBuffer("/data_24h.bin", (float *)buffer24h, 3 * SIZE_24H, head24h);
+
+  if (save)
+  {
+    saveBuffer("/data_24h.bin", (float *)buffer24h, 3 * SIZE_24H, head24h);
+  }
 }
 
 // Add values and save 30d buffer
-void addTo30dBuffer(float p1, float p2, float p3)
+void addTo30dBuffer(float p1, float p2, float p3, bool save = true)
 {
-  buffer30d[0][head30d] = p1;
-  buffer30d[1][head30d] = p2;
-  buffer30d[2][head30d] = p3;
-  head30d = (head30d + 1) % SIZE_30D;
-  saveBuffer("/data_30d.bin", (float *)buffer30d, 3 * SIZE_30D, head30d);
+  buffer30d[0][head31d] = p1;
+  buffer30d[1][head31d] = p2;
+  buffer30d[2][head31d] = p3;
+  head31d = (head31d + 1) % SIZE_31D;
+
+  if (save)
+  {
+    saveBuffer("/data_31d.bin", (float *)buffer30d, 3 * SIZE_31D, head31d);
+  }
 }
 
 // Add values and save 12m buffer
-void addToMonthsBuffer(float p1, float p2, float p3)
+void addToMonthsBuffer(float p1, float p2, float p3, bool save = true)
 {
-  buffer12m[0][head12m] = p1;
-  buffer12m[1][head12m] = p2;
-  buffer12m[2][head12m] = p3;
-  head12m = (head12m + 1) % size_12M;
-  saveBuffer("/data_12m.bin", (float *)buffer12m, 3 * size_12M, head12m);
+  buffer12m[0][headmonths] = p1;
+  buffer12m[1][headmonths] = p2;
+  buffer12m[2][headmonths] = p3;
+  headmonths = (headmonths + 1) % SIZE_MONTHS; // Remember to use your new size_12M (60) constant
+
+  if (save)
+  {
+    saveBuffer("/data_months.bin", (float *)buffer12m, 3 * SIZE_MONTHS, headmonths);
+  }
 }
 
 // Fill gaps in data after a reboot or power cut
@@ -230,38 +242,92 @@ void fillGapsAfterBoot()
 {
   time_t now;
   time(&now);
+
   if (lastWriteTime == 0 || now < lastWriteTime)
   {
+    saveLastWriteTime(now);
     return;
   }
+
   long secondsOffline = now - lastWriteTime;
-  int missedPoints15m = secondsOffline / (savePeriod * 60);
-  if (missedPoints15m > SIZE_24H)
-    missedPoints15m = SIZE_24H;
 
-  if (missedPoints15m > 0)
-  {
-    Serial.print("Power cut: Adding ");
-    Serial.print(missedPoints15m);
-    Serial.println(" empty points to 24h.");
-    for (int i = 0; i < missedPoints15m; i++)
-    {
-      addTo24hBuffer(0.0, 0.0, 0.0);
-    }
+  // If offline for > 5 years : reset to avoid a massive loop
+  if (secondsOffline > (157788000))
+  { // 5 years in seconds
+    Serial.println("Offline too long. Resetting sync time only.");
+    saveLastWriteTime(now);
+    return;
   }
 
-  int missedPointsDay = secondsOffline / 86400;
-  if (missedPointsDay > SIZE_30D)
-    missedPointsDay = SIZE_30D;
+  struct tm lastTm;
+  localtime_r(&lastWriteTime, &lastTm);
+  int trackerDay = lastTm.tm_mday;
+  int trackerMonth = lastTm.tm_mon;
 
-  if (missedPointsDay > 0)
+  time_t cursor = lastWriteTime + (savePeriod * 60);
+
+  Serial.println("Synchronizing gaps...");
+
+  while (cursor <= now)
   {
-    for (int i = 0; i < missedPointsDay; i++)
+    addTo24hBuffer(0.0, 0.0, 0.0, false);
+
+    countForDay++;
+    struct tm cursorTm;
+    localtime_r(&cursor, &cursorTm);
+
+    // Did we cross midnight?
+    if (cursorTm.tm_mday != trackerDay)
     {
-      addTo30dBuffer(0.0, 0.0, 0.0);
+      float avgDay[3];
+      for (int i = 0; i < 3; i++)
+        avgDay[i] = (countForDay > 0) ? sumForDay[i] / countForDay : 0;
+
+      // Save to 31-Day Buffer
+      addTo30dBuffer(avgDay[0], avgDay[1], avgDay[2], false);
+
+      Serial.printf("Gap Fill: Day Saved (Avg P1: %.1f)\n", avgDay[0]);
+
+      for (int i = 0; i < 3; i++)
+      {
+        sumForMonth[i] += avgDay[i];
+      }
+      countForMonth++;
+
+      for (int i = 0; i < 3; i++)
+        sumForDay[i] = 0;
+      countForDay = 0;
+
+      if (cursorTm.tm_mon != trackerMonth)
+      {
+        float avgMonth[3];
+        for (int i = 0; i < 3; i++)
+          avgMonth[i] = (countForMonth > 0) ? sumForMonth[i] / countForMonth : 0;
+
+        addToMonthsBuffer(avgMonth[0], avgMonth[1], avgMonth[2], false);
+        Serial.println("Gap Fill: Month Saved.");
+
+        for (int i = 0; i < 3; i++)
+          sumForMonth[i] = 0;
+        countForMonth = 0;
+        trackerMonth = cursorTm.tm_mon;
+      }
+      trackerDay = cursorTm.tm_mday;
     }
+
+    cursor += (savePeriod * 60);
   }
+
+  saveBuffer("/data_24h.bin", (float *)buffer24h, 3 * SIZE_24H, head24h);
+  saveBuffer("/data_31d.bin", (float *)buffer30d, 3 * SIZE_31D, head31d);
+  saveBuffer("/data_months.bin", (float *)buffer12m, 3 * SIZE_MONTHS, headmonths);
   saveLastWriteTime(now);
+
+  struct tm nowTm;
+  localtime_r(&now, &nowTm);
+  lastDay = nowTm.tm_mday;
+  lastMonth = nowTm.tm_mon;
+  lastMinute = nowTm.tm_min;
 }
 
 // Helper to add data to JSON document based on circular buffer
@@ -304,26 +370,26 @@ String getHistoryJSON(int plugId, int graphId)
       addPlugHistory(doc, "history_24h", "plug_3", buffer24h[2], SIZE_24H, head24h);
   }
 
-  // Daily History (Flash) - "history_30d"
+  // Daily History (Flash) - "history_31d"
   if (graphId == 0 || graphId == 3)
   {
     if (plugId == 0 || plugId == 1)
-      addPlugHistory(doc, "history_30d", "plug_1", buffer30d[0], SIZE_30D, head30d);
+      addPlugHistory(doc, "history_31d", "plug_1", buffer30d[0], SIZE_31D, head31d);
     if (plugId == 0 || plugId == 2)
-      addPlugHistory(doc, "history_30d", "plug_2", buffer30d[1], SIZE_30D, head30d);
+      addPlugHistory(doc, "history_31d", "plug_2", buffer30d[1], SIZE_31D, head31d);
     if (plugId == 0 || plugId == 3)
-      addPlugHistory(doc, "history_30d", "plug_3", buffer30d[2], SIZE_30D, head30d);
+      addPlugHistory(doc, "history_31d", "plug_3", buffer30d[2], SIZE_31D, head31d);
   }
 
-  // Monthly History (Flash) - "history_1y"
+  // Monthly History (Flash) - "history_months"
   if (graphId == 0 || graphId == 4)
   {
     if (plugId == 0 || plugId == 1)
-      addPlugHistory(doc, "history_1y", "plug_1", buffer12m[0], size_12M, head12m);
+      addPlugHistory(doc, "history_months", "plug_1", buffer12m[0], SIZE_MONTHS, headmonths);
     if (plugId == 0 || plugId == 2)
-      addPlugHistory(doc, "history_1y", "plug_2", buffer12m[1], size_12M, head12m);
+      addPlugHistory(doc, "history_months", "plug_2", buffer12m[1], SIZE_MONTHS, headmonths);
     if (plugId == 0 || plugId == 3)
-      addPlugHistory(doc, "history_1y", "plug_3", buffer12m[2], size_12M, head12m);
+      addPlugHistory(doc, "history_months", "plug_3", buffer12m[2], SIZE_MONTHS, headmonths);
   }
 
   String output;
@@ -431,6 +497,71 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
   }
 }
 
+void reconstructAccumulators()
+{
+  if (lastWriteTime == 0)
+    return;
+
+  struct tm lastTm;
+  localtime_r(&lastWriteTime, &lastTm);
+  int targetMonth = lastTm.tm_mon;
+  int targetDay = lastTm.tm_mday;
+
+  for (int k = 0; k < 3; k++)
+    sumForMonth[k] = 0;
+  countForMonth = 0;
+
+  Serial.println("Reconstructing Month...");
+
+  for (int i = 0; i < SIZE_31D; i++)
+  {
+    int idx = (head31d - 1 - i + SIZE_31D) % SIZE_31D;
+
+    time_t tDate = lastWriteTime - ((i + 1) * 86400);
+    struct tm tTm;
+    localtime_r(&tDate, &tTm);
+
+    if (tTm.tm_mon == targetMonth)
+    {
+      sumForMonth[0] += buffer30d[0][idx];
+      sumForMonth[1] += buffer30d[1][idx];
+      sumForMonth[2] += buffer30d[2][idx];
+      countForMonth++;
+    }
+    else
+    {
+      break;
+    }
+  }
+  Serial.printf(" recovered %d days.\n", countForMonth);
+
+  for (int k = 0; k < 3; k++)
+    sumForDay[k] = 0;
+  countForDay = 0;
+
+  // Scan backwards through 24h buffer
+  for (int i = 0; i < SIZE_24H; i++)
+  {
+    int idx = (head24h - 1 - i + SIZE_24H) % SIZE_24H;
+
+    time_t tTime = lastWriteTime - ((i + 1) * savePeriod * 60);
+    struct tm tTm;
+    localtime_r(&tTime, &tTm);
+
+    if (tTm.tm_mday == targetDay && tTm.tm_mon == targetMonth)
+    {
+      sumForDay[0] += buffer24h[0][idx];
+      sumForDay[1] += buffer24h[1][idx];
+      sumForDay[2] += buffer24h[2][idx];
+      countForDay++;
+    }
+    else
+    {
+      break;
+    }
+  }
+}
+
 void updateDisplayState(int r1, float c1, int r2, float c2, int r3, float c3)
 {
   display.clearDisplay();
@@ -509,8 +640,8 @@ void setup()
 
   // NOTE: loadBuffer now takes 3*SIZE because we cast 2D array to pointer
   loadBuffer("/data_24h.bin", (float *)buffer24h, 3 * SIZE_24H, head24h);
-  loadBuffer("/data_30d.bin", (float *)buffer30d, 3 * SIZE_30D, head30d);
-  loadBuffer("/data_12m.bin", (float *)buffer12m, 3 * size_12M, head12m);
+  loadBuffer("/data_31d.bin", (float *)buffer30d, 3 * SIZE_31D, head31d);
+  loadBuffer("/data_months.bin", (float *)buffer12m, 3 * SIZE_MONTHS, headmonths);
 
   pinMode(RELAY_PIN_1, OUTPUT);
   pinMode(RELAY_PIN_2, OUTPUT);
@@ -555,6 +686,7 @@ void setup()
   // Time and NTP setup
   loadLastWriteTime();
   configTime(0, 0, ntpServer);
+
   struct tm timeinfo;
   Serial.print("Waiting for NTP sync...");
   while (!getLocalTime(&timeinfo))
@@ -563,8 +695,25 @@ void setup()
     delay(500);
   }
   Serial.println(" OK");
-  lastMinute = timeinfo.tm_min;
+
+  if (lastWriteTime > 0)
+  {
+    struct tm lastTm;
+    localtime_r(&lastWriteTime, &lastTm);
+    lastDay = lastTm.tm_mday;
+    lastMonth = lastTm.tm_mon;
+    reconstructAccumulators();
+  }
+  else
+  {
+    lastDay = timeinfo.tm_mday;
+    lastMonth = timeinfo.tm_mon;
+  }
+
   fillGapsAfterBoot();
+
+  getLocalTime(&timeinfo);
+  lastMinute = timeinfo.tm_min;
 
   float sum1_20 = 0, sum1_5 = 0;
   float sum2_20 = 0, sum2_5 = 0;
