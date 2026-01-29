@@ -60,11 +60,11 @@ float buffer24h[3][SIZE_24H];
 int head24h = 0;
 
 const int SIZE_31D = 31;
-float buffer30d[3][SIZE_31D];
+float buffer31d[3][SIZE_31D];
 int head31d = 0;
 
 const int SIZE_MONTHS = 60; // 5 years of monthly data
-float buffer12m[3][SIZE_MONTHS];
+float buffermonths[3][SIZE_MONTHS];
 int headmonths = 0;
 
 // RAM buffer for minute history
@@ -209,31 +209,31 @@ void addTo24hBuffer(float p1, float p2, float p3, bool save = true)
   }
 }
 
-// Add values and save 30d buffer
-void addTo30dBuffer(float p1, float p2, float p3, bool save = true)
+// Add values and save 31d buffer
+void addTo31dBuffer(float p1, float p2, float p3, bool save = true)
 {
-  buffer30d[0][head31d] = p1;
-  buffer30d[1][head31d] = p2;
-  buffer30d[2][head31d] = p3;
+  buffer31d[0][head31d] = p1;
+  buffer31d[1][head31d] = p2;
+  buffer31d[2][head31d] = p3;
   head31d = (head31d + 1) % SIZE_31D;
 
   if (save)
   {
-    saveBuffer("/data_31d.bin", (float *)buffer30d, 3 * SIZE_31D, head31d);
+    saveBuffer("/data_31d.bin", (float *)buffer31d, 3 * SIZE_31D, head31d);
   }
 }
 
 // Add values and save 12m buffer
 void addToMonthsBuffer(float p1, float p2, float p3, bool save = true)
 {
-  buffer12m[0][headmonths] = p1;
-  buffer12m[1][headmonths] = p2;
-  buffer12m[2][headmonths] = p3;
+  buffermonths[0][headmonths] = p1;
+  buffermonths[1][headmonths] = p2;
+  buffermonths[2][headmonths] = p3;
   headmonths = (headmonths + 1) % SIZE_MONTHS; // Remember to use your new size_12M (60) constant
 
   if (save)
   {
-    saveBuffer("/data_months.bin", (float *)buffer12m, 3 * SIZE_MONTHS, headmonths);
+    saveBuffer("/data_months.bin", (float *)buffermonths, 3 * SIZE_MONTHS, headmonths);
   }
 }
 
@@ -284,7 +284,7 @@ void fillGapsAfterBoot()
         avgDay[i] = (countForDay > 0) ? sumForDay[i] / countForDay : 0;
 
       // Save to 31-Day Buffer
-      addTo30dBuffer(avgDay[0], avgDay[1], avgDay[2], false);
+      addTo31dBuffer(avgDay[0], avgDay[1], avgDay[2], false);
 
       Serial.printf("Gap Fill: Day Saved (Avg P1: %.1f)\n", avgDay[0]);
 
@@ -319,8 +319,8 @@ void fillGapsAfterBoot()
   }
 
   saveBuffer("/data_24h.bin", (float *)buffer24h, 3 * SIZE_24H, head24h);
-  saveBuffer("/data_31d.bin", (float *)buffer30d, 3 * SIZE_31D, head31d);
-  saveBuffer("/data_months.bin", (float *)buffer12m, 3 * SIZE_MONTHS, headmonths);
+  saveBuffer("/data_31d.bin", (float *)buffer31d, 3 * SIZE_31D, head31d);
+  saveBuffer("/data_months.bin", (float *)buffermonths, 3 * SIZE_MONTHS, headmonths);
   saveLastWriteTime(now);
 
   struct tm nowTm;
@@ -342,7 +342,7 @@ void addPlugHistory(JsonDocument &doc, const char *rootKey, const char *plugKey,
   }
 }
 
-// Graph Types: 0=All, 1=1h, 2=24h, 3=30d, 4=1y
+// Graph Types: 0=All, 1=1h, 2=24h, 3=31d, 4=months
 // Plug IDs: 0=All, 1=Plug1, 2=Plug2, 3=Plug3
 String getHistoryJSON(int plugId, int graphId)
 {
@@ -374,22 +374,22 @@ String getHistoryJSON(int plugId, int graphId)
   if (graphId == 0 || graphId == 3)
   {
     if (plugId == 0 || plugId == 1)
-      addPlugHistory(doc, "history_31d", "plug_1", buffer30d[0], SIZE_31D, head31d);
+      addPlugHistory(doc, "history_31d", "plug_1", buffer31d[0], SIZE_31D, head31d);
     if (plugId == 0 || plugId == 2)
-      addPlugHistory(doc, "history_31d", "plug_2", buffer30d[1], SIZE_31D, head31d);
+      addPlugHistory(doc, "history_31d", "plug_2", buffer31d[1], SIZE_31D, head31d);
     if (plugId == 0 || plugId == 3)
-      addPlugHistory(doc, "history_31d", "plug_3", buffer30d[2], SIZE_31D, head31d);
+      addPlugHistory(doc, "history_31d", "plug_3", buffer31d[2], SIZE_31D, head31d);
   }
 
   // Monthly History (Flash) - "history_months"
   if (graphId == 0 || graphId == 4)
   {
     if (plugId == 0 || plugId == 1)
-      addPlugHistory(doc, "history_months", "plug_1", buffer12m[0], SIZE_MONTHS, headmonths);
+      addPlugHistory(doc, "history_months", "plug_1", buffermonths[0], SIZE_MONTHS, headmonths);
     if (plugId == 0 || plugId == 2)
-      addPlugHistory(doc, "history_months", "plug_2", buffer12m[1], SIZE_MONTHS, headmonths);
+      addPlugHistory(doc, "history_months", "plug_2", buffermonths[1], SIZE_MONTHS, headmonths);
     if (plugId == 0 || plugId == 3)
-      addPlugHistory(doc, "history_months", "plug_3", buffer12m[2], SIZE_MONTHS, headmonths);
+      addPlugHistory(doc, "history_months", "plug_3", buffermonths[2], SIZE_MONTHS, headmonths);
   }
 
   String output;
@@ -485,9 +485,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
         graphId = 1;
       if (msg.indexOf("TYPE=24h") >= 0)
         graphId = 2;
-      if (msg.indexOf("TYPE=30d") >= 0)
+      if (msg.indexOf("TYPE=31d") >= 0)
         graphId = 3;
-      if (msg.indexOf("TYPE=1y") >= 0)
+      if (msg.indexOf("TYPE=months") >= 0)
         graphId = 4;
 
       String json = getHistoryJSON(plugId, graphId);
@@ -523,9 +523,9 @@ void reconstructAccumulators()
 
     if (tTm.tm_mon == targetMonth)
     {
-      sumForMonth[0] += buffer30d[0][idx];
-      sumForMonth[1] += buffer30d[1][idx];
-      sumForMonth[2] += buffer30d[2][idx];
+      sumForMonth[0] += buffer31d[0][idx];
+      sumForMonth[1] += buffer31d[1][idx];
+      sumForMonth[2] += buffer31d[2][idx];
       countForMonth++;
     }
     else
@@ -634,14 +634,14 @@ void setup()
 
   // Initialize buffers and load saved data
   memset(buffer24h, 0, sizeof(buffer24h));
-  memset(buffer30d, 0, sizeof(buffer30d));
-  memset(buffer12m, 0, sizeof(buffer12m));
+  memset(buffer31d, 0, sizeof(buffer31d));
+  memset(buffermonths, 0, sizeof(buffermonths));
   memset(ramHistoryMinutes, 0, sizeof(ramHistoryMinutes));
 
   // NOTE: loadBuffer now takes 3*SIZE because we cast 2D array to pointer
   loadBuffer("/data_24h.bin", (float *)buffer24h, 3 * SIZE_24H, head24h);
-  loadBuffer("/data_31d.bin", (float *)buffer30d, 3 * SIZE_31D, head31d);
-  loadBuffer("/data_months.bin", (float *)buffer12m, 3 * SIZE_MONTHS, headmonths);
+  loadBuffer("/data_31d.bin", (float *)buffer31d, 3 * SIZE_31D, head31d);
+  loadBuffer("/data_months.bin", (float *)buffermonths, 3 * SIZE_MONTHS, headmonths);
 
   pinMode(RELAY_PIN_1, OUTPUT);
   pinMode(RELAY_PIN_2, OUTPUT);
@@ -874,7 +874,7 @@ void loop()
         for (int i = 0; i < 3; i++)
           avgDay[i] = (countForDay > 0) ? sumForDay[i] / countForDay : 0;
 
-        addTo30dBuffer(avgDay[0], avgDay[1], avgDay[2]);
+        addTo31dBuffer(avgDay[0], avgDay[1], avgDay[2]);
 
         for (int i = 0; i < 3; i++)
         {
