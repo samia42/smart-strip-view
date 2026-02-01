@@ -21,42 +21,32 @@ const DashboardOverview = () => {
   const socketRef = useRef<WebSocket | null>(null);
   const rangeKeyRef = useRef(overviewRangeKey);
 
-  const getStoredCurrencyCode = () => {
-    return localStorage.getItem("app_currency") || "USD";
-  };
-
-  const [currencyCode, setCurrencyCode] = useState(getStoredCurrencyCode());
-
-  useEffect(() => {
-    setCurrencyCode(getStoredCurrencyCode());
-  }, [costConfig.currency]);
-
   useEffect(() => {
     rangeKeyRef.current = overviewRangeKey;
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      const type = mapRangeToType(overviewRangeKey);
+      const type = mapRangeToRequestType(overviewRangeKey);
       socketRef.current.send(`GET_HISTORY TYPE=${type}`);
     }
   }, [overviewRangeKey]);
 
   const currencySymbol = useMemo(() => {
-    switch (currencyCode) {
+    switch (costConfig.currency) {
       case "EUR": return "€";
       case "GBP": return "£";
       case "USD": return "$";
       default: return getCurrencySymbol();
     }
-  }, [currencyCode, getCurrencySymbol]);
+  }, [costConfig.currency, getCurrencySymbol]);
 
   const CurrencyIcon = useMemo(() => {
-    switch (currencyCode) {
+    switch (costConfig.currency) {
       case "EUR": return Euro;
       case "GBP": return PoundSterling;
       default: return DollarSign;
     }
-  }, [currencyCode]);
+  }, [costConfig.currency]);
 
-  const mapRangeToType = (range: string) => {
+  const mapRangeToRequestType = (range: string) => {
     switch (range) {
       case "graph_60min": return "1h";
       case "graph_24h": return "24h";
@@ -66,25 +56,45 @@ const DashboardOverview = () => {
     }
   };
 
-  const getResolutionInHours = (type: string) => {
-    switch (type) {
-      case "1h": return 1 / 60;
-      case "24h": return 15 / 60;
-      case "30d": return 24;
-      case "1y": return 24 * 30;
+  const mapRangeToJsonKey = (range: string) => {
+    switch (range) {
+      case "graph_60min": return "history_1h";
+      case "graph_24h": return "history_24h";
+      case "graph_30d": return "history_30d";
+      case "graph_months": return "history_1y";
+      default: return "history_24h";
+    }
+  };
+
+  const getHoursMultiplier = (range: string) => {
+    switch (range) {
+      case "graph_60min": return 1 / 60;
+      case "graph_24h": return 15 / 60;
+      case "graph_30d": return 24;
+      case "graph_months": return 24 * 30;
       default: return 1;
     }
   };
 
-  const getLabelFormat = (type: string, date: Date) => {
-    switch (type) {
-      case "1h":
+  const getTimeIntervalMs = (range: string) => {
+    switch (range) {
+      case "graph_60min": return 60 * 1000;
+      case "graph_24h": return 15 * 60 * 1000;
+      case "graph_30d": return 24 * 60 * 60 * 1000;
+      case "graph_months": return 30 * 24 * 60 * 60 * 1000;
+      default: return 60 * 1000;
+    }
+  };
+
+  const getLabelFormat = (range: string, date: Date) => {
+    switch (range) {
+      case "graph_60min":
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      case "24h":
+      case "graph_24h":
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      case "30d":
+      case "graph_30d":
         return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-      case "1y":
+      case "graph_months":
         return date.toLocaleDateString([], { month: 'short', year: '2-digit' });
       default:
         return date.toLocaleString();
@@ -99,7 +109,7 @@ const DashboardOverview = () => {
       setWsConnected(true);
       ws.send("GET_HISTORY TYPE=24h");
 
-      const currentType = mapRangeToType(rangeKeyRef.current);
+      const currentType = mapRangeToRequestType(rangeKeyRef.current);
       if (currentType !== "24h") {
         ws.send(`GET_HISTORY TYPE=${currentType}`);
       }
@@ -121,44 +131,47 @@ const DashboardOverview = () => {
           const p3 = data24h.plug_3 || [];
           const maxLen = Math.max(p1.length, p2.length, p3.length);
 
-          let totalWattsSum = 0;
+          let totalKWhSum = 0;
+          const hoursFactor = 15 / 60;
 
           for (let i = 0; i < maxLen; i++) {
             const watts = (p1[i] || 0) + (p2[i] || 0) + (p3[i] || 0);
-            totalWattsSum += watts;
+            const kwhForInterval = (watts / 1000) * hoursFactor;
+            totalKWhSum += kwhForInterval;
           }
 
-          const avgWatts = maxLen > 0 ? totalWattsSum / maxLen : 0;
-          const calculatedKWh = (avgWatts * 24) / 1000;
-
-          setFixedTotal24h(calculatedKWh);
+          setFixedTotal24h(totalKWhSum);
         }
 
-        const currentRangeType = mapRangeToType(rangeKeyRef.current);
-        const chartKey = `history_${currentRangeType}`;
+        const currentRangeKey = rangeKeyRef.current;
+        const jsonKey = mapRangeToJsonKey(currentRangeKey);
 
-        if (json[chartKey]) {
-          const data = json[chartKey];
+        if (json[jsonKey]) {
+          const data = json[jsonKey];
           const plug1 = data.plug_1 || [];
           const plug2 = data.plug_2 || [];
           const plug3 = data.plug_3 || [];
 
           const maxLength = Math.max(plug1.length, plug2.length, plug3.length);
           const processedData = [];
-          const resolution = getResolutionInHours(currentRangeType);
+          
+          const hoursMultiplier = getHoursMultiplier(currentRangeKey);
+          const intervalMs = getTimeIntervalMs(currentRangeKey);
 
           for (let i = 0; i < maxLength; i++) {
             const val1 = plug1[i] || 0;
             const val2 = plug2[i] || 0;
             const val3 = plug3[i] || 0;
-            const totalWatts = val1 + val2 + val3;
+            const totalAvgWatts = val1 + val2 + val3;
 
-            const timeOffset = (maxLength - 1 - i) * (resolution * 60 * 60 * 1000);
+            const totalKWh = (totalAvgWatts / 1000) * hoursMultiplier;
+
+            const timeOffset = (maxLength - 1 - i) * intervalMs;
             const timestamp = new Date(now.getTime() - timeOffset);
 
             processedData.push({
-              label: getLabelFormat(currentRangeType, timestamp),
-              value: totalWatts / 1000
+              label: getLabelFormat(currentRangeKey, timestamp),
+              value: totalKWh
             });
           }
 

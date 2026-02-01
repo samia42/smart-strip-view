@@ -1,161 +1,73 @@
-import { createContext, useContext, useMemo, useRef, useState } from "react";
-import { socketsData, SocketData } from "@/data/mockData";
-import {
-  buildSocketHistory,
-  getSeriesForRange,
-  sumSeries,
-  type ConsumptionPoint,
-  type TimeRange,
-} from "@/data/powerRetention";
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-interface CurrencyOption {
-  code: "USD" | "EUR" | "GBP";
-  symbol: string;
-  label: string;
-}
-
-export const currencyOptions: CurrencyOption[] = [
-  { code: "USD", symbol: "$", label: "USD ($)" },
-  { code: "EUR", symbol: "€", label: "EUR (€)" },
-  { code: "GBP", symbol: "£", label: "GBP (£)" },
+export const currencyOptions = [
+  { code: "USD", symbol: "$" },
+  { code: "EUR", symbol: "€" },
+  { code: "GBP", symbol: "£" },
 ];
 
 interface CostConfig {
   rate: number;
-  currency: CurrencyOption["code"];
+  currency: "USD" | "EUR" | "GBP";
 }
 
-interface PowerStripContextValue {
-  sockets: SocketData[];
+interface SocketData {
+  id: string;
+  name: string;
+  monthlyConsumption: number;
+}
+
+interface PowerStripContextType {
   costConfig: CostConfig;
   setCostConfig: (config: CostConfig) => void;
-  toggleSocket: (socketId: number) => void;
-  renameSocket: (socketId: number, name: string) => void;
-  getTotalConsumption: () => number;
   getTotalCost: () => number;
-  getTopConsumers: (count?: number) => SocketData[];
-  getConsumptionSeries: (
-    outletId: number | "all",
-    range: TimeRange,
-  ) => ConsumptionPoint[];
+  getTopConsumers: (limit: number) => SocketData[];
   getCurrencySymbol: () => string;
 }
 
-const PowerStripContext = createContext<PowerStripContextValue | undefined>(
-  undefined,
-);
+const PowerStripContext = createContext<PowerStripContextType | undefined>(undefined);
 
-export const PowerStripProvider = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => {
-  const [sockets, setSockets] = useState<SocketData[]>(socketsData);
-  const [costConfig, setCostConfig] = useState<CostConfig>({
-    rate: 0.15,
-    currency: "USD",
+export const PowerStripProvider = ({ children }: { children: ReactNode }) => {
+  const [costConfig, setCostConfigState] = useState<CostConfig>(() => {
+    const savedRate = localStorage.getItem("energy_cost");
+    const savedCurrency = localStorage.getItem("app_currency");
+    return {
+      rate: savedRate ? parseFloat(savedRate) : 0.15,
+      currency: (savedCurrency as "USD" | "EUR" | "GBP") || "USD"
+    };
   });
 
-  const basePowerRef = useRef(
-    new Map(socketsData.map((socket) => [socket.id, socket.currentPower])),
-  );
-  const historyMap = useMemo(() => {
-    const now = Date.now();
-    const entries = socketsData.map((socket) => [
-      socket.id,
-      buildSocketHistory(socket.currentPower, now),
-    ]);
-    return new Map<number, ReturnType<typeof buildSocketHistory>>(
-      entries as [number, ReturnType<typeof buildSocketHistory>][],
-    );
-  }, []);
-
-  const toggleSocket = (socketId: number) => {
-    setSockets((prev) =>
-      prev.map((socket) => {
-        if (socket.id !== socketId) {
-          return socket;
-        }
-        const nextStatus = socket.status === "on" ? "off" : "on";
-        const basePower =
-          basePowerRef.current.get(socketId) ?? socket.currentPower;
-        return {
-          ...socket,
-          status: nextStatus,
-          currentPower: nextStatus === "on" ? basePower : 0,
-        };
-      }),
-    );
-  };
-
-  const renameSocket = (socketId: number, name: string) => {
-    setSockets((prev) =>
-      prev.map((socket) =>
-        socket.id === socketId ? { ...socket, name } : socket,
-      ),
-    );
-  };
-
-  const getTotalConsumption = () => {
-    return Number(
-      sockets.reduce((acc, socket) => acc + socket.currentPower, 0).toFixed(2),
-    );
-  };
-
-  const getTotalCost = () => {
-    return Number(
-      sockets
-        .reduce(
-          (acc, socket) => acc + socket.monthlyConsumption * costConfig.rate,
-          0,
-        )
-        .toFixed(2),
-    );
-  };
-
-  const getTopConsumers = (count: number = 3) => {
-    return [...sockets]
-      .sort((a, b) => b.monthlyConsumption - a.monthlyConsumption)
-      .slice(0, count);
-  };
-
-  const getConsumptionSeries = (outletId: number | "all", range: TimeRange) => {
-    if (outletId === "all") {
-      const allSeries = sockets
-        .map((socket) => historyMap.get(socket.id))
-        .filter(Boolean)
-        .map((history) => getSeriesForRange(history!, range));
-      return sumSeries(allSeries);
-    }
-    const history = historyMap.get(outletId);
-    if (!history) {
-      return [];
-    }
-    return getSeriesForRange(history, range);
+  const setCostConfig = (config: CostConfig) => {
+    setCostConfigState(config);
+    localStorage.setItem("energy_cost", config.rate.toString());
+    localStorage.setItem("app_currency", config.currency);
   };
 
   const getCurrencySymbol = () => {
-    return (
-      currencyOptions.find((option) => option.code === costConfig.currency)
-        ?.symbol ?? "$"
-    );
+    return currencyOptions.find(o => o.code === costConfig.currency)?.symbol || "$";
   };
 
-  const value: PowerStripContextValue = {
-    sockets,
-    costConfig,
-    setCostConfig,
-    toggleSocket,
-    renameSocket,
-    getTotalConsumption,
-    getTotalCost,
-    getTopConsumers,
-    getConsumptionSeries,
-    getCurrencySymbol,
+  const getTotalCost = () => {
+    return 145.20 * costConfig.rate; 
+  };
+
+  const getTopConsumers = (limit: number) => {
+    const dummyData: SocketData[] = [
+      { id: "1", name: "Gaming PC", monthlyConsumption: 45.5 },
+      { id: "2", name: "Monitor 4K", monthlyConsumption: 12.2 },
+      { id: "3", name: "Desk Lamp", monthlyConsumption: 2.1 },
+    ];
+    return dummyData.slice(0, limit);
   };
 
   return (
-    <PowerStripContext.Provider value={value}>
+    <PowerStripContext.Provider value={{ 
+      costConfig, 
+      setCostConfig, 
+      getTotalCost, 
+      getTopConsumers, 
+      getCurrencySymbol
+    }}>
       {children}
     </PowerStripContext.Provider>
   );
@@ -163,8 +75,8 @@ export const PowerStripProvider = ({
 
 export const usePowerStrip = () => {
   const context = useContext(PowerStripContext);
-  if (!context) {
-    throw new Error("usePowerStrip must be used within PowerStripProvider");
+  if (context === undefined) {
+    throw new Error('usePowerStrip must be used within a PowerStripProvider');
   }
   return context;
 };

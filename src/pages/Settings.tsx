@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button, Container, Form, Row, Col } from "react-bootstrap";
 import { DollarSign, Save, Sparkles, Shield, Zap, Euro, PoundSterling } from "lucide-react";
 import { toast } from "sonner";
@@ -7,20 +7,8 @@ import { currencyOptions, usePowerStrip } from "@/context/PowerStripContext";
 const Settings = () => {
   const { costConfig, setCostConfig } = usePowerStrip();
 
-  const [savedGeneral, setSavedGeneral] = useState(() => {
-    const savedRate = localStorage.getItem("energy_cost");
-    const savedCurrency = localStorage.getItem("app_currency");
-    
-    let validCurrency: "USD" | "EUR" | "GBP" = costConfig.currency;
-    if (savedCurrency === "USD" || savedCurrency === "EUR" || savedCurrency === "GBP") {
-      validCurrency = savedCurrency;
-    }
-
-    return {
-      rate: savedRate ? parseFloat(savedRate) : costConfig.rate,
-      currency: validCurrency
-    };
-  });
+  const [rate, setRate] = useState(costConfig.rate);
+  const [currency, setCurrency] = useState(costConfig.currency);
 
   const [savedSafety, setSavedSafety] = useState(() => {
     const savedTotal = localStorage.getItem("safety_max_total");
@@ -30,14 +18,16 @@ const Settings = () => {
       maxSocket: savedSocket ? parseFloat(savedSocket) : 16
     };
   });
-
-  const [rate, setRate] = useState(savedGeneral.rate);
-  const [currency, setCurrency] = useState(savedGeneral.currency);
   
   const [maxTotalCurrent, setMaxTotalCurrent] = useState(savedSafety.maxTotal);
   const [maxSocketCurrent, setMaxSocketCurrent] = useState(savedSafety.maxSocket);
 
-  const isGeneralDirty = rate !== savedGeneral.rate || currency !== savedGeneral.currency;
+  useEffect(() => {
+    setRate(costConfig.rate);
+    setCurrency(costConfig.currency);
+  }, [costConfig]);
+
+  const isGeneralDirty = rate !== costConfig.rate || currency !== costConfig.currency;
   const isSafetyDirty = maxTotalCurrent !== savedSafety.maxTotal || maxSocketCurrent !== savedSafety.maxSocket;
 
   const selectedSymbol = useMemo(() => {
@@ -48,33 +38,23 @@ const Settings = () => {
 
   const CurrencyIcon = useMemo(() => {
     switch (currency) {
-      case "EUR":
-        return Euro;
-      case "GBP":
-        return PoundSterling;
-      default:
-        return DollarSign;
+      case "EUR": return Euro;
+      case "GBP": return PoundSterling;
+      default: return DollarSign;
     }
   }, [currency]);
 
   const handleSaveGeneral = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem("energy_cost", rate.toString());
-    localStorage.setItem("app_currency", currency);
-    
-    setSavedGeneral({ rate, currency });
     setCostConfig({ rate, currency });
-    
-    toast.success("General settings saved locally");
+    toast.success("General settings saved and applied");
   };
 
   const handleSaveSafety = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem("safety_max_total", maxTotalCurrent.toString());
     localStorage.setItem("safety_max_socket", maxSocketCurrent.toString());
-
     setSavedSafety({ maxTotal: maxTotalCurrent, maxSocket: maxSocketCurrent });
-    
     toast.success("Safety thresholds saved successfully");
   };
 
