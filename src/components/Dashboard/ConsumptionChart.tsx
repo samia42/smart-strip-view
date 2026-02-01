@@ -13,9 +13,10 @@ interface ConsumptionChartProps {
   title: string;
   data: { label: string; value: number }[];
   unit: string;
-  rangeValue: string;
-  rangeOptions: { value: string; label: string }[];
-  onRangeChange: (value: string) => void;
+  rangeValue?: string;
+  rangeOptions?: { value: string; label: string }[];
+  onRangeChange?: (value: string) => void;
+  hideControls?: boolean;
 }
 
 const ConsumptionChart = ({
@@ -25,6 +26,7 @@ const ConsumptionChart = ({
   rangeValue,
   rangeOptions,
   onRangeChange,
+  hideControls = false,
 }: ConsumptionChartProps) => {
   
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -33,8 +35,8 @@ const ConsumptionChart = ({
       return (
         <div
           style={{
-            backgroundColor: "rgba(15, 23, 42, 0.95)", 
-            border: "1px solid rgba(51, 65, 85, 0.5)", 
+            backgroundColor: "rgba(15, 23, 42, 0.95)",
+            border: "1px solid rgba(51, 65, 85, 0.5)",
             padding: "12px",
             borderRadius: "8px",
             boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.5)",
@@ -58,22 +60,25 @@ const ConsumptionChart = ({
       <Card.Body className="p-4 d-flex flex-column h-100">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <Card.Title className="text-white mb-0">{title}</Card.Title>
-          <Form.Select
-            size="sm"
-            value={rangeValue}
-            onChange={(e) => onRangeChange(e.target.value)}
-            className="bg-slate-900 border-slate-700 text-white w-auto shadow-sm"
-            style={{ minWidth: "140px", cursor: "pointer" }}
-          >
-            {rangeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Form.Select>
+          
+          {!hideControls && rangeOptions && rangeOptions.length > 0 && (
+            <Form.Select
+              size="sm"
+              value={rangeValue}
+              onChange={(e) => onRangeChange && onRangeChange(e.target.value)}
+              className="bg-slate-900 border-slate-700 text-white w-auto shadow-sm"
+              style={{ minWidth: "140px", cursor: "pointer" }}
+            >
+              {rangeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Form.Select>
+          )}
         </div>
 
-        <div style={{ flex: 1, minHeight: "300px", width: "100%" }}>
+        <div style={{ flex: 1, minHeight: "400px", width: "100%" }}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={data}

@@ -11,9 +11,10 @@ interface CostConfig {
   currency: "USD" | "EUR" | "GBP";
 }
 
-interface SocketData {
-  id: string;
+export interface Socket {
+  id: number;
   name: string;
+  status: 'on' | 'off';
   monthlyConsumption: number;
 }
 
@@ -21,8 +22,10 @@ interface PowerStripContextType {
   costConfig: CostConfig;
   setCostConfig: (config: CostConfig) => void;
   getTotalCost: () => number;
-  getTopConsumers: (limit: number) => SocketData[];
   getCurrencySymbol: () => string;
+  sockets: Socket[];
+  renameSocket: (id: number, newName: string) => void;
+  getTopConsumers: (limit: number) => Socket[];
 }
 
 const PowerStripContext = createContext<PowerStripContextType | undefined>(undefined);
@@ -51,13 +54,30 @@ export const PowerStripProvider = ({ children }: { children: ReactNode }) => {
     return 145.20 * costConfig.rate; 
   };
 
-  const getTopConsumers = (limit: number) => {
-    const dummyData: SocketData[] = [
-      { id: "1", name: "Gaming PC", monthlyConsumption: 45.5 },
-      { id: "2", name: "Monitor 4K", monthlyConsumption: 12.2 },
-      { id: "3", name: "Desk Lamp", monthlyConsumption: 2.1 },
+  const [sockets, setSockets] = useState<Socket[]>(() => {
+    const savedNames = localStorage.getItem("sockets_config");
+    if (savedNames) {
+      return JSON.parse(savedNames);
+    }
+    return [
+      { id: 1, name: "Outlet 1", status: "off", monthlyConsumption: 45.5 },
+      { id: 2, name: "Outlet 2", status: "off", monthlyConsumption: 12.2 },
+      { id: 3, name: "Outlet 3", status: "off", monthlyConsumption: 2.1 },
     ];
-    return dummyData.slice(0, limit);
+  });
+
+  const renameSocket = (id: number, newName: string) => {
+    const updatedSockets = sockets.map(socket => 
+      socket.id === id ? { ...socket, name: newName } : socket
+    );
+    setSockets(updatedSockets);
+    localStorage.setItem("sockets_config", JSON.stringify(updatedSockets));
+  };
+
+  const getTopConsumers = (limit: number) => {
+    return [...sockets]
+      .sort((a, b) => b.monthlyConsumption - a.monthlyConsumption)
+      .slice(0, limit);
   };
 
   return (
@@ -65,8 +85,10 @@ export const PowerStripProvider = ({ children }: { children: ReactNode }) => {
       costConfig, 
       setCostConfig, 
       getTotalCost, 
-      getTopConsumers, 
-      getCurrencySymbol
+      getCurrencySymbol,
+      sockets,
+      renameSocket,
+      getTopConsumers
     }}>
       {children}
     </PowerStripContext.Provider>

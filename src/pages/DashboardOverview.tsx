@@ -1,21 +1,33 @@
-import { Card, Col, Container, ListGroup, Row, Badge } from "react-bootstrap";
+import { Card, Col, Container, ListGroup, Row, Badge, ProgressBar } from "react-bootstrap";
 import { DollarSign, Zap, Wifi, WifiOff, Euro, PoundSterling } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import MetricCard from "@/components/Dashboard/MetricCard";
 import ConsumptionChart from "@/components/Dashboard/ConsumptionChart";
 import { usePowerStrip } from "@/context/PowerStripContext";
 
+interface ConsumerData {
+  id: number;
+  name: string;
+  kwh: number;
+  cost: number;
+  percent: number;
+}
+
 const DashboardOverview = () => {
   const {
-    getTotalCost,
-    getTopConsumers,
     getCurrencySymbol,
     costConfig,
+    sockets, 
   } = usePowerStrip();
 
   const [wsConnected, setWsConnected] = useState(false);
   const [chartData, setChartData] = useState<{ label: string; value: number }[]>([]);
+  
   const [fixedTotal24h, setFixedTotal24h] = useState(0);
+  const [monthlyConsumption, setMonthlyConsumption] = useState(0); 
+  
+  const [topConsumersData, setTopConsumersData] = useState<ConsumerData[]>([]);
+
   const [overviewRangeKey, setOverviewRangeKey] = useState("graph_24h");
 
   const socketRef = useRef<WebSocket | null>(null);
@@ -45,6 +57,8 @@ const DashboardOverview = () => {
       default: return DollarSign;
     }
   }, [costConfig.currency]);
+
+  const realTotalCost = monthlyConsumption * costConfig.rate;
 
   const mapRangeToRequestType = (range: string) => {
     switch (range) {
@@ -108,9 +122,10 @@ const DashboardOverview = () => {
     ws.onopen = () => {
       setWsConnected(true);
       ws.send("GET_HISTORY TYPE=24h");
+      ws.send("GET_HISTORY TYPE=30d");
 
       const currentType = mapRangeToRequestType(rangeKeyRef.current);
-      if (currentType !== "24h") {
+      if (currentType !== "24h" && currentType !== "30d") {
         ws.send(`GET_HISTORY TYPE=${currentType}`);
       }
     };
@@ -139,8 +154,60 @@ const DashboardOverview = () => {
             const kwhForInterval = (watts / 1000) * hoursFactor;
             totalKWhSum += kwhForInterval;
           }
-
           setFixedTotal24h(totalKWhSum);
+        }
+
+        if (json.history_30d) {
+          const data30d = json.history_30d;
+          const p1 = data30d.plug_1 || [];
+          const p2 = data30d.plug_2 || [];
+          const p3 = data30d.plug_3 || [];
+          const maxLen = Math.max(p1.length, p2.length, p3.length);
+
+          let totalMonthlyKWh = 0;
+          
+          let sumKWhP1 = 0;
+          let sumKWhP2 = 0;
+          let sumKWhP3 = 0;
+
+          const hoursFactor = 24;
+
+          for (let i = 0; i < maxLen; i++) {
+            const val1 = p1[i] || 0;
+            const val2 = p2[i] || 0;
+            const val3 = p3[i] || 0;
+
+            const totalWattsDay = val1 + val2 + val3;
+            
+            sumKWhP1 += (val1 / 1000) * hoursFactor;
+            sumKWhP2 += (val2 / 1000) * hoursFactor;
+            sumKWhP3 += (val3 / 1000) * hoursFactor;
+
+            totalMonthlyKWh += (totalWattsDay / 1000) * hoursFactor;
+          }
+          
+          setMonthlyConsumption(totalMonthlyKWh);
+
+          const rawConsumers = [
+            { id: 1, kwh: sumKWhP1 },
+            { id: 2, kwh: sumKWhP2 },
+            { id: 3, kwh: sumKWhP3 },
+          ];
+
+          const maxVal = Math.max(sumKWhP1, sumKWhP2, sumKWhP3) || 1;
+
+          const processedConsumers = rawConsumers.map(c => {
+            const socketInfo = sockets.find(s => s.id === c.id);
+            return {
+              id: c.id,
+              name: socketInfo ? socketInfo.name : `Outlet ${c.id}`,
+              kwh: c.kwh,
+              cost: c.kwh * costConfig.rate,
+              percent: (c.kwh / maxVal) * 100
+            };
+          }).sort((a, b) => b.kwh - a.kwh);
+
+          setTopConsumersData(processedConsumers);
         }
 
         const currentRangeKey = rangeKeyRef.current;
@@ -184,10 +251,7 @@ const DashboardOverview = () => {
     return () => {
       ws.close();
     };
-  }, []);
-
-  const totalCost = getTotalCost();
-  const topConsumers = getTopConsumers(3);
+  }, [costConfig.rate, sockets]);
 
   const overviewRangeOptions = [
     { value: "graph_60min", label: "Last 60 min" },
@@ -231,7 +295,7 @@ const DashboardOverview = () => {
         <Col md={6} lg={6}>
           <MetricCard
             title="Total Price"
-            value={`${currencySymbol}${totalCost.toFixed(2)}`}
+            value={`${currencySymbol}${realTotalCost.toFixed(2)}`}
             subtitle="Estimated cost for the last 30 days"
             icon={CurrencyIcon}
             variant="success"
@@ -271,32 +335,49 @@ const DashboardOverview = () => {
         <Col lg={4}>
           <Card className="h-100 rounded-3xl border border-slate-700/60 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
             <Card.Body className="p-4">
-              <Card.Title className="mb-3 text-white">Top Consuming Devices</Card.Title>
-              <ListGroup variant="flush">
-                {topConsumers.map((socket) => {
-                  const estimatedCost =
-                    socket.monthlyConsumption * costConfig.rate;
+              <Card.Title className="mb-4 text-white">Top Consumers (Last 30 days)</Card.Title>
+              <div className="d-flex flex-column gap-4">
+                {topConsumersData.map((item, index) => {
                   return (
-                    <ListGroup.Item
-                      key={socket.id}
-                      className="bg-transparent border-slate-800 text-white px-0"
-                    >
-                      <div className="d-flex justify-content-between align-items-start">
+                    <div key={item.id} className="w-100">
+                      <div className="d-flex justify-content-between align-items-end mb-1">
                         <div>
-                          <div className="fw-bold">{socket.name}</div>
-                          <small className="text-slate-400">
-                            {socket.monthlyConsumption.toFixed(1)} kWh / month
+                          <div className="fw-bold text-white mb-0" style={{ fontSize: '1rem' }}>
+                            {item.name}
+                          </div>
+                          <small className="text-slate-400" style={{ fontSize: '0.8rem' }}>
+                            {item.kwh.toFixed(1)} kWh
                           </small>
                         </div>
-                        <div className="text-primary fw-bold">
-                          {currencySymbol}
-                          {estimatedCost.toFixed(2)}
+                        <div className="text-end">
+                          <div className="fw-bold text-primary">
+                            {currencySymbol}{item.cost.toFixed(2)}
+                          </div>
                         </div>
                       </div>
-                    </ListGroup.Item>
+                      
+                      <ProgressBar 
+                        now={item.percent} 
+                        className="bg-slate-800"
+                        style={{ height: '6px', borderRadius: '4px' }}
+                      >
+                         <ProgressBar 
+                            now={item.percent} 
+                            style={{ 
+                              backgroundColor: index === 0 ? '#3b82f6' : (index === 1 ? '#3b82f6' : '#3b82f6'),
+                              borderRadius: '4px' 
+                            }} 
+                         />
+                      </ProgressBar>
+                    </div>
                   );
                 })}
-              </ListGroup>
+                {topConsumersData.length === 0 && (
+                   <div className="text-center text-slate-500 py-4">
+                     Waiting for data...
+                   </div>
+                )}
+              </div>
             </Card.Body>
           </Card>
         </Col>
