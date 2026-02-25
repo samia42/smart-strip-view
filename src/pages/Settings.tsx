@@ -52,10 +52,33 @@ const Settings = () => {
 
   const handleSaveSafety = (e: React.FormEvent) => {
     e.preventDefault();
+    
     localStorage.setItem("safety_max_total", maxTotalCurrent.toString());
     localStorage.setItem("safety_max_socket", maxSocketCurrent.toString());
     setSavedSafety({ maxTotal: maxTotalCurrent, maxSocket: maxSocketCurrent });
-    toast.success("Safety thresholds saved successfully");
+
+    try {
+      const ws = new WebSocket("ws://SmartPowerStrip.local:81");
+      
+      ws.onopen = () => {
+        ws.send(`SET_MAX_TOTAL=${maxTotalCurrent}`);
+        ws.send(`SET_MAX_SOCKET=${maxSocketCurrent}`);
+        
+        setTimeout(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.close();
+          }
+        }, 1000);
+      };
+
+      ws.onerror = () => {
+        toast.error("Could not send limits to the power strip");
+      };
+      
+      toast.success("Safety thresholds saved successfully");
+    } catch (error) {
+      toast.error("Connection error");
+    }
   };
 
   return (
@@ -130,7 +153,7 @@ const Settings = () => {
                       step="0.01"
                       value={rate}
                       onChange={(event) => setRate(Number(event.target.value))}
-                      className="bg-transparent border-0 text-white p-0"
+                      className="bg-transparent border-0 text-white p-0 shadow-none"
                       style={{ maxWidth: "120px" }}
                     />
                     <div className="ms-auto text-slate-400">
@@ -197,7 +220,7 @@ const Settings = () => {
                       step="0.5"
                       value={maxTotalCurrent}
                       onChange={(event) => setMaxTotalCurrent(Number(event.target.value))}
-                      className="bg-transparent border-0 text-white p-0"
+                      className="bg-transparent border-0 text-white p-0 shadow-none"
                       style={{ maxWidth: "120px" }}
                     />
                     <div className="ms-auto text-slate-400">
@@ -233,7 +256,7 @@ const Settings = () => {
                       step="0.5"
                       value={maxSocketCurrent}
                       onChange={(event) => setMaxSocketCurrent(Number(event.target.value))}
-                      className="bg-transparent border-0 text-white p-0"
+                      className="bg-transparent border-0 text-white p-0 shadow-none"
                       style={{ maxWidth: "120px" }}
                     />
                     <div className="ms-auto text-slate-400">
