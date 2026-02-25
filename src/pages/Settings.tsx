@@ -18,7 +18,7 @@ const Settings = () => {
       maxSocket: savedSocket ? parseFloat(savedSocket) : 16
     };
   });
-  
+
   const [maxTotalCurrent, setMaxTotalCurrent] = useState(savedSafety.maxTotal);
   const [maxSocketCurrent, setMaxSocketCurrent] = useState(savedSafety.maxSocket);
 
@@ -52,18 +52,18 @@ const Settings = () => {
 
   const handleSaveSafety = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     localStorage.setItem("safety_max_total", maxTotalCurrent.toString());
     localStorage.setItem("safety_max_socket", maxSocketCurrent.toString());
     setSavedSafety({ maxTotal: maxTotalCurrent, maxSocket: maxSocketCurrent });
 
     try {
       const ws = new WebSocket("ws://SmartPowerStrip.local:81");
-      
+
       ws.onopen = () => {
-        ws.send(`SET_MAX_TOTAL=${maxTotalCurrent}`);
-        ws.send(`SET_MAX_SOCKET=${maxSocketCurrent}`);
-        
+        ws.send(`SET_MAX_TOTAL ${maxTotalCurrent}`);
+        ws.send(`SET_MAX_SOCKET ${maxSocketCurrent}`);
+
         setTimeout(() => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.close();
@@ -74,7 +74,7 @@ const Settings = () => {
       ws.onerror = () => {
         toast.error("Could not send limits to the power strip");
       };
-      
+
       toast.success("Safety thresholds saved successfully");
     } catch (error) {
       toast.error("Connection error");
@@ -227,7 +227,7 @@ const Settings = () => {
                       Amperes (A)
                     </div>
                   </div>
-                  <Form.Range 
+                  <Form.Range
                     min="0"
                     max="16"
                     step="0.5"
@@ -263,7 +263,7 @@ const Settings = () => {
                       Amperes (A)
                     </div>
                   </div>
-                  <Form.Range 
+                  <Form.Range
                     min="0"
                     max="16"
                     step="0.5"

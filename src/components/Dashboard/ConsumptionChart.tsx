@@ -28,7 +28,7 @@ const ConsumptionChart = ({
   onRangeChange,
   hideControls = false,
 }: ConsumptionChartProps) => {
-  
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const value = payload[0].value;
@@ -60,12 +60,14 @@ const ConsumptionChart = ({
       <Card.Body className="p-4 d-flex flex-column h-100">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <Card.Title className="text-white mb-0">{title}</Card.Title>
-          
+
           {!hideControls && rangeOptions && rangeOptions.length > 0 && (
             <Form.Select
               size="sm"
               value={rangeValue}
-              onChange={(e) => onRangeChange && onRangeChange(e.target.value)}
+              onChange={(e) => {
+                onRangeChange && onRangeChange(e.target.value);
+              }}
               className="bg-slate-900 border-slate-700 text-white w-auto shadow-sm"
               style={{ minWidth: "140px", cursor: "pointer" }}
             >
@@ -118,7 +120,7 @@ const ConsumptionChart = ({
                 strokeWidth={3}
                 fillOpacity={1}
                 fill="url(#colorValue)"
-                animationDuration={1000}
+                isAnimationActive={true}
               />
             </AreaChart>
           </ResponsiveContainer>

@@ -1,9 +1,11 @@
-import { Card, Col, Container, ListGroup, Row, Badge, ProgressBar } from "react-bootstrap";
+import { Card, Col, Container, Row, Badge, ProgressBar } from "react-bootstrap";
 import { DollarSign, Zap, Wifi, WifiOff, Euro, PoundSterling } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import MetricCard from "@/components/Dashboard/MetricCard";
 import ConsumptionChart from "@/components/Dashboard/ConsumptionChart";
 import { usePowerStrip } from "@/context/PowerStripContext";
+
+import { toast } from "sonner";
 
 interface ConsumerData {
   id: number;
@@ -17,24 +19,24 @@ const DashboardOverview = () => {
   const {
     getCurrencySymbol,
     costConfig,
-    sockets, 
+    sockets,
   } = usePowerStrip();
 
   const [wsConnected, setWsConnected] = useState(false);
   const [chartData, setChartData] = useState<{ label: string; value: number }[]>([]);
-  
+
   const [fixedTotal24h, setFixedTotal24h] = useState(0);
-  const [monthlyConsumption, setMonthlyConsumption] = useState(0); 
-  
+  const [monthlyConsumption, setMonthlyConsumption] = useState(0);
+
   const [topConsumersData, setTopConsumersData] = useState<ConsumerData[]>([]);
 
   const [overviewRangeKey, setOverviewRangeKey] = useState("graph_24h");
 
+  const [rawData, setRawData] = useState<any>({});
+
   const socketRef = useRef<WebSocket | null>(null);
-  const rangeKeyRef = useRef(overviewRangeKey);
 
   useEffect(() => {
-    rangeKeyRef.current = overviewRangeKey;
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       const type = mapRangeToRequestType(overviewRangeKey);
       socketRef.current.send(`GET_HISTORY TYPE=${type}`);
@@ -103,15 +105,24 @@ const DashboardOverview = () => {
   const getLabelFormat = (range: string, date: Date) => {
     switch (range) {
       case "graph_60min":
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       case "graph_24h":
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return date.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
       case "graph_30d":
-        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        return date.toLocaleDateString("en-US", { month: 'short', day: 'numeric' });
       case "graph_months":
-        return date.toLocaleDateString([], { month: 'short', year: '2-digit' });
+        return date.toLocaleDateString("en-US", { month: 'short', year: '2-digit' });
       default:
-        return date.toLocaleString();
+        return date.toLocaleString("en-US");
+    }
+  };
+
+  const getFallbackLength = (range: string) => {
+    switch (range) {
+      case "graph_60min": return 60;
+      case "graph_24h": return 96;
+      case "graph_30d": return 30;
+      case "graph_months": return 60;
+      default: return 60;
     }
   };
 
@@ -124,7 +135,7 @@ const DashboardOverview = () => {
       ws.send("GET_HISTORY TYPE=24h");
       ws.send("GET_HISTORY TYPE=30d");
 
-      const currentType = mapRangeToRequestType(rangeKeyRef.current);
+      const currentType = mapRangeToRequestType(overviewRangeKey);
       if (currentType !== "24h" && currentType !== "30d") {
         ws.send(`GET_HISTORY TYPE=${currentType}`);
       }
@@ -136,114 +147,8 @@ const DashboardOverview = () => {
 
     ws.onmessage = (event) => {
       try {
-        const json = JSON.parse(event.data);
-        const now = new Date();
-
-        if (json.history_24h) {
-          const data24h = json.history_24h;
-          const p1 = data24h.plug_1 || [];
-          const p2 = data24h.plug_2 || [];
-          const p3 = data24h.plug_3 || [];
-          const maxLen = Math.max(p1.length, p2.length, p3.length);
-
-          let totalKWhSum = 0;
-          const hoursFactor = 15 / 60;
-
-          for (let i = 0; i < maxLen; i++) {
-            const watts = (p1[i] || 0) + (p2[i] || 0) + (p3[i] || 0);
-            const kwhForInterval = (watts / 1000) * hoursFactor;
-            totalKWhSum += kwhForInterval;
-          }
-          setFixedTotal24h(totalKWhSum);
-        }
-
-        if (json.history_30d) {
-          const data30d = json.history_30d;
-          const p1 = data30d.plug_1 || [];
-          const p2 = data30d.plug_2 || [];
-          const p3 = data30d.plug_3 || [];
-          const maxLen = Math.max(p1.length, p2.length, p3.length);
-
-          let totalMonthlyKWh = 0;
-          
-          let sumKWhP1 = 0;
-          let sumKWhP2 = 0;
-          let sumKWhP3 = 0;
-
-          const hoursFactor = 24;
-
-          for (let i = 0; i < maxLen; i++) {
-            const val1 = p1[i] || 0;
-            const val2 = p2[i] || 0;
-            const val3 = p3[i] || 0;
-
-            const totalWattsDay = val1 + val2 + val3;
-            
-            sumKWhP1 += (val1 / 1000) * hoursFactor;
-            sumKWhP2 += (val2 / 1000) * hoursFactor;
-            sumKWhP3 += (val3 / 1000) * hoursFactor;
-
-            totalMonthlyKWh += (totalWattsDay / 1000) * hoursFactor;
-          }
-          
-          setMonthlyConsumption(totalMonthlyKWh);
-
-          const rawConsumers = [
-            { id: 1, kwh: sumKWhP1 },
-            { id: 2, kwh: sumKWhP2 },
-            { id: 3, kwh: sumKWhP3 },
-          ];
-
-          const maxVal = Math.max(sumKWhP1, sumKWhP2, sumKWhP3) || 1;
-
-          const processedConsumers = rawConsumers.map(c => {
-            const socketInfo = sockets.find(s => s.id === c.id);
-            return {
-              id: c.id,
-              name: socketInfo ? socketInfo.name : `Outlet ${c.id}`,
-              kwh: c.kwh,
-              cost: c.kwh * costConfig.rate,
-              percent: (c.kwh / maxVal) * 100
-            };
-          }).sort((a, b) => b.kwh - a.kwh);
-
-          setTopConsumersData(processedConsumers);
-        }
-
-        const currentRangeKey = rangeKeyRef.current;
-        const jsonKey = mapRangeToJsonKey(currentRangeKey);
-
-        if (json[jsonKey]) {
-          const data = json[jsonKey];
-          const plug1 = data.plug_1 || [];
-          const plug2 = data.plug_2 || [];
-          const plug3 = data.plug_3 || [];
-
-          const maxLength = Math.max(plug1.length, plug2.length, plug3.length);
-          const processedData = [];
-          
-          const hoursMultiplier = getHoursMultiplier(currentRangeKey);
-          const intervalMs = getTimeIntervalMs(currentRangeKey);
-
-          for (let i = 0; i < maxLength; i++) {
-            const val1 = plug1[i] || 0;
-            const val2 = plug2[i] || 0;
-            const val3 = plug3[i] || 0;
-            const totalAvgWatts = val1 + val2 + val3;
-
-            const totalKWh = (totalAvgWatts / 1000) * hoursMultiplier;
-
-            const timeOffset = (maxLength - 1 - i) * intervalMs;
-            const timestamp = new Date(now.getTime() - timeOffset);
-
-            processedData.push({
-              label: getLabelFormat(currentRangeKey, timestamp),
-              value: totalKWh
-            });
-          }
-
-          setChartData(processedData);
-        }
+        const parsed = JSON.parse(event.data);
+        setRawData((prev: any) => ({ ...prev, ...parsed }));
       } catch (e) {
       }
     };
@@ -251,7 +156,122 @@ const DashboardOverview = () => {
     return () => {
       ws.close();
     };
-  }, [costConfig.rate, sockets]);
+  }, []);
+
+  useEffect(() => {
+    if (!rawData) return;
+
+    if (rawData.history_24h) {
+      const data24h = rawData.history_24h;
+      const p1 = data24h.plug_1 || [];
+      const p2 = data24h.plug_2 || [];
+      const p3 = data24h.plug_3 || [];
+      const maxLen = Math.max(p1.length, p2.length, p3.length);
+
+      let totalKWhSum = 0;
+      const hoursFactor = 15 / 60;
+
+      for (let i = 0; i < maxLen; i++) {
+        const watts = (p1[i] || 0) + (p2[i] || 0) + (p3[i] || 0);
+        totalKWhSum += (watts / 1000) * hoursFactor;
+      }
+      setFixedTotal24h(totalKWhSum);
+    }
+
+    if (rawData.history_30d) {
+      const data30d = rawData.history_30d;
+      const p1 = data30d.plug_1 || [];
+      const p2 = data30d.plug_2 || [];
+      const p3 = data30d.plug_3 || [];
+      const maxLen = Math.max(p1.length, p2.length, p3.length);
+
+      let totalMonthlyKWh = 0;
+      let sumKWhP1 = 0;
+      let sumKWhP2 = 0;
+      let sumKWhP3 = 0;
+
+      const hoursFactor = 24;
+
+      for (let i = 0; i < maxLen; i++) {
+        const val1 = p1[i] || 0;
+        const val2 = p2[i] || 0;
+        const val3 = p3[i] || 0;
+
+        sumKWhP1 += (val1 / 1000) * hoursFactor;
+        sumKWhP2 += (val2 / 1000) * hoursFactor;
+        sumKWhP3 += (val3 / 1000) * hoursFactor;
+
+        totalMonthlyKWh += ((val1 + val2 + val3) / 1000) * hoursFactor;
+      }
+
+      setMonthlyConsumption(totalMonthlyKWh);
+
+      const rawConsumers = [
+        { id: 1, kwh: sumKWhP1 },
+        { id: 2, kwh: sumKWhP2 },
+        { id: 3, kwh: sumKWhP3 },
+      ];
+
+      const maxVal = Math.max(sumKWhP1, sumKWhP2, sumKWhP3) || 1;
+
+      const processedConsumers = rawConsumers.map(c => {
+        const socketInfo = sockets.find(s => s.id === c.id);
+        return {
+          id: c.id,
+          name: socketInfo ? socketInfo.name : `Outlet ${c.id}`,
+          kwh: c.kwh,
+          cost: c.kwh * costConfig.rate,
+          percent: (c.kwh / maxVal) * 100
+        };
+      }).sort((a, b) => b.kwh - a.kwh);
+
+      setTopConsumersData(processedConsumers);
+    }
+
+    const jsonKey = mapRangeToJsonKey(overviewRangeKey);
+    const data = rawData[jsonKey];
+
+    let plug1: number[] = [];
+    let plug2: number[] = [];
+    let plug3: number[] = [];
+    let maxLength = 0;
+
+    if (data) {
+      plug1 = data.plug_1 || [];
+      plug2 = data.plug_2 || [];
+      plug3 = data.plug_3 || [];
+      maxLength = Math.max(plug1.length, plug2.length, plug3.length);
+    }
+
+    if (maxLength === 0) {
+      maxLength = getFallbackLength(overviewRangeKey);
+    }
+
+    const processedData = [];
+    const now = new Date();
+    const hoursMultiplier = getHoursMultiplier(overviewRangeKey);
+    const intervalMs = getTimeIntervalMs(overviewRangeKey);
+
+    for (let i = 0; i < maxLength; i++) {
+      const val1 = plug1[i] || 0;
+      const val2 = plug2[i] || 0;
+      const val3 = plug3[i] || 0;
+      const totalAvgWatts = val1 + val2 + val3;
+
+      const totalKWh = (totalAvgWatts / 1000) * hoursMultiplier;
+
+      const timeOffset = i * intervalMs;
+      const timestamp = new Date(now.getTime() - (maxLength - 1) * intervalMs + timeOffset);
+
+      processedData.push({
+        label: getLabelFormat(overviewRangeKey, timestamp),
+        value: totalKWh
+      });
+    }
+
+    setChartData(processedData);
+
+  }, [rawData, overviewRangeKey, costConfig.rate, sockets]);
 
   const overviewRangeOptions = [
     { value: "graph_60min", label: "Last 60 min" },
@@ -355,28 +375,23 @@ const DashboardOverview = () => {
                           </div>
                         </div>
                       </div>
-                      
-                      <ProgressBar 
-                        now={item.percent} 
+
+                      <ProgressBar
+                        now={item.percent}
                         className="bg-slate-800"
                         style={{ height: '6px', borderRadius: '4px' }}
                       >
-                         <ProgressBar 
-                            now={item.percent} 
-                            style={{ 
-                              backgroundColor: index === 0 ? '#3b82f6' : (index === 1 ? '#3b82f6' : '#3b82f6'),
-                              borderRadius: '4px' 
-                            }} 
-                         />
+                        <ProgressBar
+                          now={item.percent}
+                          style={{
+                            backgroundColor: '#3b82f6',
+                            borderRadius: '4px'
+                          }}
+                        />
                       </ProgressBar>
                     </div>
                   );
                 })}
-                {topConsumersData.length === 0 && (
-                   <div className="text-center text-slate-500 py-4">
-                     Waiting for data...
-                   </div>
-                )}
               </div>
             </Card.Body>
           </Card>

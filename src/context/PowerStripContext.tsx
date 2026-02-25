@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { toast } from "sonner";
 
 export const currencyOptions = [
   { code: "USD", symbol: "$" },
@@ -51,7 +52,7 @@ export const PowerStripProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const getTotalCost = () => {
-    return 145.20 * costConfig.rate; 
+    return 145.20 * costConfig.rate;
   };
 
   const [sockets, setSockets] = useState<Socket[]>(() => {
@@ -67,7 +68,7 @@ export const PowerStripProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const renameSocket = (id: number, newName: string) => {
-    const updatedSockets = sockets.map(socket => 
+    const updatedSockets = sockets.map(socket =>
       socket.id === id ? { ...socket, name: newName } : socket
     );
     setSockets(updatedSockets);
@@ -80,11 +81,66 @@ export const PowerStripProvider = ({ children }: { children: ReactNode }) => {
       .slice(0, limit);
   };
 
+  useEffect(() => {
+    let ws: WebSocket;
+    let reconnectTimer: NodeJS.Timeout;
+
+    const connect = () => {
+      ws = new WebSocket("ws://SmartPowerStrip.local:81");
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.event && data.event.startsWith("overcurrent")) {
+            let alertMessage = "";
+
+            if (data.event === "overcurrent_total") {
+              alertMessage = "Cutoff: Total current limit exceeded!";
+            } else if (data.event === "overcurrent_socket1") {
+              alertMessage = "Cutoff: Current limit exceeded on Outlet 1!";
+            } else if (data.event === "overcurrent_socket2") {
+              alertMessage = "Cutoff: Current limit exceeded on Outlet 2!";
+            } else if (data.event === "overcurrent_socket3") {
+              alertMessage = "Cutoff: Current limit exceeded on Outlet 3!";
+            }
+
+            if (alertMessage) {
+              toast.error(alertMessage, {
+                duration: 10000,
+                id: data.event,
+                action: {
+                  label: "Fix it",
+                  onClick: () => window.location.href = "/devices"
+                }
+              });
+            }
+          }
+        } catch (e) {
+        }
+      };
+
+      ws.onclose = () => {
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
+  }, []);
+
   return (
-    <PowerStripContext.Provider value={{ 
-      costConfig, 
-      setCostConfig, 
-      getTotalCost, 
+    <PowerStripContext.Provider value={{
+      costConfig,
+      setCostConfig,
+      getTotalCost,
       getCurrencySymbol,
       sockets,
       renameSocket,
