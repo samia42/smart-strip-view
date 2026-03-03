@@ -44,6 +44,9 @@ const float RESISTOR_MULTIPLIER = 1.545454;
 
 const float AC_VOLTAGE = 230.0;
 
+float maxTotalCurrent = 15.0;
+float maxSocketCurrent = 10.0;
+
 float offset1_20A = 2.5;
 float offset1_5A = 2.5;
 float offset2_20A = 2.5;
@@ -398,22 +401,48 @@ String getHistoryJSON(int plugId, int graphId)
 }
 
 // Measure AC current
-float getACCurrent(int sensorPin, float sensitivity, float offset)
+float getACCurrent(int sensorPin, float sensitivity)
 {
-  float sumSquares = 0;
+  double sumVoltage = 0;
+  double sumSquaresVoltage = 0;
   long sampleCount = 0;
+
   unsigned long startTime = millis();
-  while (millis() - startTime < 20)
+  while (millis() - startTime < 150)
   {
     int adcValue = analogRead(sensorPin);
-    float voltagePin = (adcValue * VREF) / ADC_RES;
-    float voltageOriginal = voltagePin * RESISTOR_MULTIPLIER;
-    float currentInst = (voltageOriginal - offset) / sensitivity;
-    sumSquares += (currentInst * currentInst);
+    double voltagePin = (adcValue * VREF) / ADC_RES;
+    double voltageOriginal = voltagePin * RESISTOR_MULTIPLIER;
+
+    sumVoltage += voltageOriginal;
+    sumSquaresVoltage += (voltageOriginal * voltageOriginal);
     sampleCount++;
   }
-  float rms = sqrt(sumSquares / sampleCount);
-  return rms;
+
+  if (sampleCount == 0)
+    return 0.0;
+
+  double meanVoltage = sumVoltage / sampleCount;
+  double meanSquareVoltage = sumSquaresVoltage / sampleCount;
+
+  // Variance isolates the AC component by removing the DC offset dynamically
+  double variance = meanSquareVoltage - (meanVoltage * meanVoltage);
+
+  // Protect against tiny negative numbers due to floating point inaccuracies
+  if (variance < 0)
+    variance = 0;
+
+  double rmsVoltageAC = sqrt(variance);
+  float rmsCurrent = rmsVoltageAC / sensitivity;
+
+  // Apply a deadband to filter out ADC noise when nothing is plugged in
+  float noiseThreshold = (sensitivity == SENSITIVITY_20A) ? 0.25 : 0.15;
+  if (rmsCurrent < noiseThreshold)
+  {
+    return 0.0;
+  }
+
+  return rmsCurrent;
 }
 
 float getMergedCurrent(float val20A, float val5A)
@@ -467,6 +496,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
     else if (msg == "RELAY3_OFF")
     {
       digitalWrite(RELAY_PIN_3, LOW);
+    }
+    else if (msg.startsWith("SET_MAX_TOTAL "))
+    {
+      maxTotalCurrent = msg.substring(14).toFloat();
+    }
+    else if (msg.startsWith("SET_MAX_SOCKET "))
+    {
+      maxSocketCurrent = msg.substring(15).toFloat();
     }
 
     // History Requests: GET_HISTORY [PLUG=x] [TYPE=x]
@@ -769,17 +806,69 @@ void loop()
   {
     lastOneSec = now;
 
-    float c1_20 = getACCurrent(CURRENT1_20A_PIN, SENSITIVITY_20A, offset1_20A);
-    float c1_5 = getACCurrent(CURRENT1_5A_PIN, SENSITIVITY_5A, offset1_5A);
+    float c1_20 = getACCurrent(CURRENT1_20A_PIN, SENSITIVITY_20A);
+    float c1_5 = getACCurrent(CURRENT1_5A_PIN, SENSITIVITY_5A);
     float current1 = getMergedCurrent(c1_20, c1_5);
 
-    float c2_20 = getACCurrent(CURRENT2_20A_PIN, SENSITIVITY_20A, offset2_20A);
-    float c2_5 = getACCurrent(CURRENT2_5A_PIN, SENSITIVITY_5A, offset2_5A);
+    float c2_20 = getACCurrent(CURRENT2_20A_PIN, SENSITIVITY_20A);
+    float c2_5 = getACCurrent(CURRENT2_5A_PIN, SENSITIVITY_5A);
     float current2 = getMergedCurrent(c2_20, c2_5);
 
-    float c3_20 = getACCurrent(CURRENT3_20A_PIN, SENSITIVITY_20A, offset3_20A);
-    float c3_5 = getACCurrent(CURRENT3_5A_PIN, SENSITIVITY_5A, offset3_5A);
+    float c3_20 = getACCurrent(CURRENT3_20A_PIN, SENSITIVITY_20A);
+    float c3_5 = getACCurrent(CURRENT3_5A_PIN, SENSITIVITY_5A);
     float current3 = getMergedCurrent(c3_20, c3_5);
+
+    // Overcurrent protection logic
+    float totalCurrent = current1 + current2 + current3;
+    static bool overcurrentTripped = false;
+
+    if (totalCurrent > maxTotalCurrent)
+    {
+      digitalWrite(RELAY_PIN_1, LOW);
+      digitalWrite(RELAY_PIN_2, LOW);
+      digitalWrite(RELAY_PIN_3, LOW);
+
+      if (!overcurrentTripped)
+      {
+        webSocket.broadcastTXT("{\"event\":\"overcurrent_total\"}");
+        overcurrentTripped = true;
+      }
+    }
+    else
+    {
+      if (current1 > maxSocketCurrent)
+      {
+        digitalWrite(RELAY_PIN_1, LOW);
+        if (!overcurrentTripped)
+        {
+          webSocket.broadcastTXT("{\"event\":\"overcurrent_socket1\"}");
+          overcurrentTripped = true;
+        }
+      }
+      if (current2 > maxSocketCurrent)
+      {
+        digitalWrite(RELAY_PIN_2, LOW);
+        if (!overcurrentTripped)
+        {
+          webSocket.broadcastTXT("{\"event\":\"overcurrent_socket2\"}");
+          overcurrentTripped = true;
+        }
+      }
+      if (current3 > maxSocketCurrent)
+      {
+        digitalWrite(RELAY_PIN_3, LOW);
+        if (!overcurrentTripped)
+        {
+          webSocket.broadcastTXT("{\"event\":\"overcurrent_socket3\"}");
+          overcurrentTripped = true;
+        }
+      }
+      // Reset flag if tout est OK
+      if (current1 <= maxSocketCurrent && current2 <= maxSocketCurrent && current3 <= maxSocketCurrent && totalCurrent <= maxTotalCurrent)
+      {
+        overcurrentTripped = false;
+      }
+    }
 
     float power1 = current1 * AC_VOLTAGE;
     float power2 = current2 * AC_VOLTAGE;
