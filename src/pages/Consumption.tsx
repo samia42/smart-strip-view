@@ -21,8 +21,8 @@ const Consumption = () => {
     switch (range) {
       case "graph_60min": return "1h";
       case "graph_24h": return "24h";
-      case "graph_30d": return "30d";
-      case "graph_months": return "1y";
+      case "graph_31d": return "31d";
+      case "graph_months": return "months";
       default: return "24h";
     }
   };
@@ -31,8 +31,8 @@ const Consumption = () => {
     switch (range) {
       case "graph_60min": return "history_1h";
       case "graph_24h": return "history_24h";
-      case "graph_30d": return "history_30d";
-      case "graph_months": return "history_1y";
+      case "graph_31d": return "history_31d";
+      case "graph_months": return "history_months";
       default: return "history_24h";
     }
   };
@@ -41,7 +41,7 @@ const Consumption = () => {
     switch (range) {
       case "graph_60min": return 1 / 60;
       case "graph_24h": return 15 / 60;
-      case "graph_30d": return 24;
+      case "graph_31d": return 24;
       case "graph_months": return 24 * 30;
       default: return 1;
     }
@@ -51,7 +51,7 @@ const Consumption = () => {
     switch (range) {
       case "graph_60min": return 60 * 1000;
       case "graph_24h": return 15 * 60 * 1000;
-      case "graph_30d": return 24 * 60 * 60 * 1000;
+      case "graph_31d": return 24 * 60 * 60 * 1000;
       case "graph_months": return 30 * 24 * 60 * 60 * 1000;
       default: return 60 * 1000;
     }
@@ -61,7 +61,7 @@ const Consumption = () => {
     switch (range) {
       case "graph_60min": return 60;
       case "graph_24h": return 96;
-      case "graph_30d": return 30;
+      case "graph_31d": return 31;
       case "graph_months": return 60;
       default: return 60;
     }
@@ -72,7 +72,7 @@ const Consumption = () => {
       case "graph_60min":
       case "graph_24h":
         return date.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
-      case "graph_30d":
+      case "graph_31d":
         return date.toLocaleDateString("en-US", { month: 'short', day: 'numeric' });
       case "graph_months":
         return date.toLocaleDateString("en-US", { month: 'short', year: '2-digit' });
@@ -96,8 +96,13 @@ const Consumption = () => {
 
     ws.onopen = () => {
       setWsConnected(true);
+      ws.send("GET_HISTORY TYPE=24h");
+      ws.send("GET_HISTORY TYPE=31d");
+      
       const type = mapRangeToRequestType(rangeKeyRef.current);
-      ws.send(`GET_HISTORY TYPE=${type}`);
+      if (type !== "24h" && type !== "31d") {
+        ws.send(`GET_HISTORY TYPE=${type}`);
+      }
     };
 
     ws.onclose = () => setWsConnected(false);
@@ -127,13 +132,13 @@ const Consumption = () => {
     let maxLength = 0;
 
     if (data) {
-      plug1 = data.plug_1 || [];
-      plug2 = data.plug_2 || [];
-      plug3 = data.plug_3 || [];
+      plug1 = Array.isArray(data.plug_1) ? data.plug_1 : [];
+      plug2 = Array.isArray(data.plug_2) ? data.plug_2 : [];
+      plug3 = Array.isArray(data.plug_3) ? data.plug_3 : [];
       maxLength = Math.max(plug1.length, plug2.length, plug3.length);
     }
 
-    if (maxLength === 0) {
+    if (!maxLength || Number.isNaN(maxLength)) {
       maxLength = getFallbackLength(rangeKey);
     }
 
@@ -144,9 +149,45 @@ const Consumption = () => {
     const intervalMs = getTimeIntervalMs(rangeKey);
 
     for (let i = 0; i < maxLength; i++) {
-      const val1 = plug1[i] || 0;
-      const val2 = plug2[i] || 0;
-      const val3 = plug3[i] || 0;
+      let val1 = Number(plug1[i]) || 0;
+      let val2 = Number(plug2[i]) || 0;
+      let val3 = Number(plug3[i]) || 0;
+
+      if (i === maxLength - 1) {
+        if (rangeKey === "graph_31d" && rawData && rawData.history_24h) {
+          const data24h = rawData.history_24h;
+          const p1_24h = Array.isArray(data24h.plug_1) ? data24h.plug_1 : [];
+          const p2_24h = Array.isArray(data24h.plug_2) ? data24h.plug_2 : [];
+          const p3_24h = Array.isArray(data24h.plug_3) ? data24h.plug_3 : [];
+          const len24h = Math.max(p1_24h.length, p2_24h.length, p3_24h.length) || 0;
+          
+          let sum1 = 0, sum2 = 0, sum3 = 0;
+          for (let j = 0; j < len24h; j++) {
+            sum1 += Number(p1_24h[j]) || 0;
+            sum2 += Number(p2_24h[j]) || 0;
+            sum3 += Number(p3_24h[j]) || 0;
+          }
+          val1 = len24h > 0 ? sum1 / len24h : 0;
+          val2 = len24h > 0 ? sum2 / len24h : 0;
+          val3 = len24h > 0 ? sum3 / len24h : 0;
+        } else if (rangeKey === "graph_months" && rawData && rawData.history_31d) {
+          const data31d = rawData.history_31d;
+          const p1_31d = Array.isArray(data31d.plug_1) ? data31d.plug_1 : [];
+          const p2_31d = Array.isArray(data31d.plug_2) ? data31d.plug_2 : [];
+          const p3_31d = Array.isArray(data31d.plug_3) ? data31d.plug_3 : [];
+          const len31d = Math.max(p1_31d.length, p2_31d.length, p3_31d.length) || 0;
+
+          let sum1 = 0, sum2 = 0, sum3 = 0;
+          for (let j = 0; j < len31d; j++) {
+            sum1 += Number(p1_31d[j]) || 0;
+            sum2 += Number(p2_31d[j]) || 0;
+            sum3 += Number(p3_31d[j]) || 0;
+          }
+          val1 = len31d > 0 ? sum1 / len31d : 0;
+          val2 = len31d > 0 ? sum2 / len31d : 0;
+          val3 = len31d > 0 ? sum3 / len31d : 0;
+        }
+      }
 
       let wattsToProcess = 0;
       const target = selectedOutlet === "all" ? "all" : Number(selectedOutlet);
@@ -161,7 +202,7 @@ const Consumption = () => {
         wattsToProcess = val3;
       }
 
-      const kwhValue = (wattsToProcess / 1000) * hoursMultiplier;
+      const kwhValue = Number.isNaN(wattsToProcess) ? 0 : (wattsToProcess / 1000) * hoursMultiplier;
 
       const timeOffset = i * intervalMs;
       const timestamp = new Date(now.getTime() - (maxLength - 1) * intervalMs + timeOffset);
@@ -178,8 +219,8 @@ const Consumption = () => {
   const graphRanges = [
     { value: "graph_60min", label: "Last 60 min" },
     { value: "graph_24h", label: "Last 24 hours" },
-    { value: "graph_30d", label: "Last 30 days" },
-    { value: "graph_months", label: "Last 12 months" },
+    { value: "graph_31d", label: "Last 31 days" },
+    { value: "graph_months", label: "Last 5 years" },
   ];
 
   const outletOptions = useMemo(() => {

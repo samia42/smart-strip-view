@@ -55,6 +55,10 @@ const ConsumptionChart = ({
     return null;
   };
 
+  const maxValue = data && data.length > 0 ? Math.max(...data.map(d => d.value)) : 0;
+  const safeMax = maxValue === 0 ? 0.01 : maxValue;
+  const customTicks = [0, safeMax * 0.25, safeMax * 0.5, safeMax * 0.75, safeMax];
+
   return (
     <Card className="h-100 rounded-3xl border border-slate-700/60 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
       <Card.Body className="p-4 d-flex flex-column h-100">
@@ -80,7 +84,7 @@ const ConsumptionChart = ({
           )}
         </div>
 
-        <div style={{ flex: 1, minHeight: "400px", width: "100%" }}>
+        <div style={{ height: "400px", width: "100%", flexShrink: 0 }}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={data}
@@ -111,6 +115,8 @@ const ConsumptionChart = ({
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(val) => val.toFixed(3)}
+                domain={[0, safeMax]}
+                ticks={customTicks}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#475569", strokeWidth: 1 }} />
               <Area
@@ -121,6 +127,8 @@ const ConsumptionChart = ({
                 fillOpacity={1}
                 fill="url(#colorValue)"
                 isAnimationActive={true}
+                animationDuration={800}
+                animationEasing="ease-in-out"
               />
             </AreaChart>
           </ResponsiveContainer>

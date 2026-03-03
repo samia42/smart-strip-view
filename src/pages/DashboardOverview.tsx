@@ -66,8 +66,8 @@ const DashboardOverview = () => {
     switch (range) {
       case "graph_60min": return "1h";
       case "graph_24h": return "24h";
-      case "graph_30d": return "30d";
-      case "graph_months": return "1y";
+      case "graph_31d": return "31d";
+      case "graph_months": return "months";
       default: return "24h";
     }
   };
@@ -76,8 +76,8 @@ const DashboardOverview = () => {
     switch (range) {
       case "graph_60min": return "history_1h";
       case "graph_24h": return "history_24h";
-      case "graph_30d": return "history_30d";
-      case "graph_months": return "history_1y";
+      case "graph_31d": return "history_31d";
+      case "graph_months": return "history_months";
       default: return "history_24h";
     }
   };
@@ -86,7 +86,7 @@ const DashboardOverview = () => {
     switch (range) {
       case "graph_60min": return 1 / 60;
       case "graph_24h": return 15 / 60;
-      case "graph_30d": return 24;
+      case "graph_31d": return 24;
       case "graph_months": return 24 * 30;
       default: return 1;
     }
@@ -96,7 +96,7 @@ const DashboardOverview = () => {
     switch (range) {
       case "graph_60min": return 60 * 1000;
       case "graph_24h": return 15 * 60 * 1000;
-      case "graph_30d": return 24 * 60 * 60 * 1000;
+      case "graph_31d": return 24 * 60 * 60 * 1000;
       case "graph_months": return 30 * 24 * 60 * 60 * 1000;
       default: return 60 * 1000;
     }
@@ -107,7 +107,7 @@ const DashboardOverview = () => {
       case "graph_60min":
       case "graph_24h":
         return date.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
-      case "graph_30d":
+      case "graph_31d":
         return date.toLocaleDateString("en-US", { month: 'short', day: 'numeric' });
       case "graph_months":
         return date.toLocaleDateString("en-US", { month: 'short', year: '2-digit' });
@@ -120,7 +120,7 @@ const DashboardOverview = () => {
     switch (range) {
       case "graph_60min": return 60;
       case "graph_24h": return 96;
-      case "graph_30d": return 30;
+      case "graph_31d": return 31;
       case "graph_months": return 60;
       default: return 60;
     }
@@ -133,10 +133,10 @@ const DashboardOverview = () => {
     ws.onopen = () => {
       setWsConnected(true);
       ws.send("GET_HISTORY TYPE=24h");
-      ws.send("GET_HISTORY TYPE=30d");
+      ws.send("GET_HISTORY TYPE=31d");
 
       const currentType = mapRangeToRequestType(overviewRangeKey);
-      if (currentType !== "24h" && currentType !== "30d") {
+      if (currentType !== "24h" && currentType !== "31d") {
         ws.send(`GET_HISTORY TYPE=${currentType}`);
       }
     };
@@ -163,27 +163,27 @@ const DashboardOverview = () => {
 
     if (rawData.history_24h) {
       const data24h = rawData.history_24h;
-      const p1 = data24h.plug_1 || [];
-      const p2 = data24h.plug_2 || [];
-      const p3 = data24h.plug_3 || [];
-      const maxLen = Math.max(p1.length, p2.length, p3.length);
+      const p1 = Array.isArray(data24h.plug_1) ? data24h.plug_1 : [];
+      const p2 = Array.isArray(data24h.plug_2) ? data24h.plug_2 : [];
+      const p3 = Array.isArray(data24h.plug_3) ? data24h.plug_3 : [];
+      const maxLen = Math.max(p1.length, p2.length, p3.length) || 0;
 
       let totalKWhSum = 0;
       const hoursFactor = 15 / 60;
 
       for (let i = 0; i < maxLen; i++) {
-        const watts = (p1[i] || 0) + (p2[i] || 0) + (p3[i] || 0);
+        const watts = (Number(p1[i]) || 0) + (Number(p2[i]) || 0) + (Number(p3[i]) || 0);
         totalKWhSum += (watts / 1000) * hoursFactor;
       }
       setFixedTotal24h(totalKWhSum);
     }
 
-    if (rawData.history_30d) {
-      const data30d = rawData.history_30d;
-      const p1 = data30d.plug_1 || [];
-      const p2 = data30d.plug_2 || [];
-      const p3 = data30d.plug_3 || [];
-      const maxLen = Math.max(p1.length, p2.length, p3.length);
+    if (rawData.history_31d) {
+      const data31d = rawData.history_31d;
+      const p1 = Array.isArray(data31d.plug_1) ? data31d.plug_1 : [];
+      const p2 = Array.isArray(data31d.plug_2) ? data31d.plug_2 : [];
+      const p3 = Array.isArray(data31d.plug_3) ? data31d.plug_3 : [];
+      const maxLen = Math.max(p1.length, p2.length, p3.length) || 0;
 
       let totalMonthlyKWh = 0;
       let sumKWhP1 = 0;
@@ -193,9 +193,27 @@ const DashboardOverview = () => {
       const hoursFactor = 24;
 
       for (let i = 0; i < maxLen; i++) {
-        const val1 = p1[i] || 0;
-        const val2 = p2[i] || 0;
-        const val3 = p3[i] || 0;
+        let val1 = Number(p1[i]) || 0;
+        let val2 = Number(p2[i]) || 0;
+        let val3 = Number(p3[i]) || 0;
+
+        if (i === maxLen - 1 && rawData.history_24h) {
+          const h24 = rawData.history_24h;
+          const h1 = Array.isArray(h24.plug_1) ? h24.plug_1 : [];
+          const h2 = Array.isArray(h24.plug_2) ? h24.plug_2 : [];
+          const h3 = Array.isArray(h24.plug_3) ? h24.plug_3 : [];
+          const l24 = Math.max(h1.length, h2.length, h3.length) || 0;
+
+          let s1 = 0, s2 = 0, s3 = 0;
+          for (let j = 0; j < l24; j++) {
+            s1 += Number(h1[j]) || 0;
+            s2 += Number(h2[j]) || 0;
+            s3 += Number(h3[j]) || 0;
+          }
+          val1 = l24 > 0 ? s1 / l24 : 0;
+          val2 = l24 > 0 ? s2 / l24 : 0;
+          val3 = l24 > 0 ? s3 / l24 : 0;
+        }
 
         sumKWhP1 += (val1 / 1000) * hoursFactor;
         sumKWhP2 += (val2 / 1000) * hoursFactor;
@@ -237,13 +255,13 @@ const DashboardOverview = () => {
     let maxLength = 0;
 
     if (data) {
-      plug1 = data.plug_1 || [];
-      plug2 = data.plug_2 || [];
-      plug3 = data.plug_3 || [];
+      plug1 = Array.isArray(data.plug_1) ? data.plug_1 : [];
+      plug2 = Array.isArray(data.plug_2) ? data.plug_2 : [];
+      plug3 = Array.isArray(data.plug_3) ? data.plug_3 : [];
       maxLength = Math.max(plug1.length, plug2.length, plug3.length);
     }
 
-    if (maxLength === 0) {
+    if (!maxLength || Number.isNaN(maxLength)) {
       maxLength = getFallbackLength(overviewRangeKey);
     }
 
@@ -253,12 +271,38 @@ const DashboardOverview = () => {
     const intervalMs = getTimeIntervalMs(overviewRangeKey);
 
     for (let i = 0; i < maxLength; i++) {
-      const val1 = plug1[i] || 0;
-      const val2 = plug2[i] || 0;
-      const val3 = plug3[i] || 0;
-      const totalAvgWatts = val1 + val2 + val3;
+      let v1 = Number(plug1[i]) || 0;
+      let v2 = Number(plug2[i]) || 0;
+      let v3 = Number(plug3[i]) || 0;
 
-      const totalKWh = (totalAvgWatts / 1000) * hoursMultiplier;
+      if (i === maxLength - 1) {
+        if (overviewRangeKey === "graph_31d" && rawData.history_24h) {
+          const h24 = rawData.history_24h;
+          const h1 = Array.isArray(h24.plug_1) ? h24.plug_1 : [];
+          const h2 = Array.isArray(h24.plug_2) ? h24.plug_2 : [];
+          const h3 = Array.isArray(h24.plug_3) ? h24.plug_3 : [];
+          const l24 = Math.max(h1.length, h2.length, h3.length) || 0;
+          let s1 = 0, s2 = 0, s3 = 0;
+          for (let j = 0; j < l24; j++) {
+            s1 += Number(h1[j]) || 0; s2 += Number(h2[j]) || 0; s3 += Number(h3[j]) || 0;
+          }
+          v1 = l24 > 0 ? s1 / l24 : 0; v2 = l24 > 0 ? s2 / l24 : 0; v3 = l24 > 0 ? s3 / l24 : 0;
+        } else if (overviewRangeKey === "graph_months" && rawData.history_31d) {
+          const h31 = rawData.history_31d;
+          const h1 = Array.isArray(h31.plug_1) ? h31.plug_1 : [];
+          const h2 = Array.isArray(h31.plug_2) ? h31.plug_2 : [];
+          const h3 = Array.isArray(h31.plug_3) ? h31.plug_3 : [];
+          const l31 = Math.max(h1.length, h2.length, h3.length) || 0;
+          let s1 = 0, s2 = 0, s3 = 0;
+          for (let j = 0; j < l31; j++) {
+            s1 += Number(h1[j]) || 0; s2 += Number(h2[j]) || 0; s3 += Number(h3[j]) || 0;
+          }
+          v1 = l31 > 0 ? s1 / l31 : 0; v2 = l31 > 0 ? s2 / l31 : 0; v3 = l31 > 0 ? s3 / l31 : 0;
+        }
+      }
+
+      const totalAvgWatts = v1 + v2 + v3;
+      const totalKWh = Number.isNaN(totalAvgWatts) ? 0 : (totalAvgWatts / 1000) * hoursMultiplier;
 
       const timeOffset = i * intervalMs;
       const timestamp = new Date(now.getTime() - (maxLength - 1) * intervalMs + timeOffset);
@@ -276,8 +320,8 @@ const DashboardOverview = () => {
   const overviewRangeOptions = [
     { value: "graph_60min", label: "Last 60 min" },
     { value: "graph_24h", label: "Last 24 hours" },
-    { value: "graph_30d", label: "Last 30 days" },
-    { value: "graph_months", label: "Last 12 months" },
+    { value: "graph_31d", label: "Last 31 days" },
+    { value: "graph_months", label: "Last 5 years" },
   ];
 
   const getRangeLabel = () => {
@@ -316,7 +360,7 @@ const DashboardOverview = () => {
           <MetricCard
             title="Total Price"
             value={`${currencySymbol}${realTotalCost.toFixed(2)}`}
-            subtitle="Estimated cost for the last 30 days"
+            subtitle="Estimated cost for the last 31 days"
             icon={CurrencyIcon}
             variant="success"
           />
@@ -355,7 +399,7 @@ const DashboardOverview = () => {
         <Col lg={4}>
           <Card className="h-100 rounded-3xl border border-slate-700/60 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_30px_80px_rgba(15,23,42,0.55)]">
             <Card.Body className="p-4">
-              <Card.Title className="mb-4 text-white">Top Consumers (Last 30 days)</Card.Title>
+              <Card.Title className="mb-4 text-white">Top Consumers (Last 31 days)</Card.Title>
               <div className="d-flex flex-column gap-4">
                 {topConsumersData.map((item, index) => {
                   return (
